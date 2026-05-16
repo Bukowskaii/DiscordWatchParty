@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import axios from 'axios';
 import { resolveSession, currentItem } from '../rooms/manager';
 import { config } from '../config';
 import { getProvider } from '../providers';
@@ -32,10 +31,10 @@ streamRouter.get('/:token/hls/playlist.m3u8', tokenGate, async (req: Request, re
 
   try {
     const provider = getProvider(room.guildId);
-    const upstream = await axios.get(provider.getHlsUrl(item.id), { responseType: 'text' });
+    const playlist = await provider.fetchHlsPlaylist(item.id);
 
     const proxyBase = `${config.server.publicUrl}/stream/${req.params.token}/hls`;
-    const rewritten = rewriteM3U8(upstream.data as string, proxyBase);
+    const rewritten = rewriteM3U8(playlist, proxyBase);
 
     res.set('Content-Type', 'application/vnd.apple.mpegurl');
     res.set('Cache-Control', 'no-cache');

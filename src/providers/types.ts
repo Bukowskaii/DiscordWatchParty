@@ -18,8 +18,8 @@ export interface MediaItem {
 export interface MediaProvider {
   search(query: string, limit?: number): Promise<MediaItem[]>;
   getMetadata(id: string): Promise<MediaItem | null>;
-  /** Full authenticated URL for the HLS master playlist (fetched server-side) */
-  getHlsUrl(id: string): string;
+  /** Fetch the HLS master playlist content from the media server */
+  fetchHlsPlaylist(id: string): Promise<string>;
   /** Resolves a path from a rewritten M3U8 back to a full authenticated upstream URL */
   resolveStreamUrl(path: string): string;
   /** Full authenticated thumbnail URL, or null */

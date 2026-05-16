@@ -70,16 +70,19 @@ export class JellyfinProvider implements MediaProvider {
     return res.data ? mapItem(res.data as JellyfinItem) : null;
   }
 
-  getHlsUrl(id: string): string {
-    const params = new URLSearchParams({
-      api_key: this.apiKey,
-      VideoCodec: 'h264',
-      AudioCodec: 'aac,mp3',
-      MaxStreamingBitrate: '8000000',
-      deviceId: DEVICE_ID,
-      PlaySessionId: randomUUID(),
+  async fetchHlsPlaylist(id: string): Promise<string> {
+    const res = await this.http.get(`/Videos/${id}/master.m3u8`, {
+      params: {
+        api_key: this.apiKey,
+        VideoCodec: 'h264',
+        AudioCodec: 'aac,mp3',
+        MaxStreamingBitrate: '8000000',
+        deviceId: DEVICE_ID,
+        PlaySessionId: randomUUID(),
+      },
+      responseType: 'text',
     });
-    return `${this.url}/Videos/${id}/master.m3u8?${params}`;
+    return res.data as string;
   }
 
   resolveStreamUrl(path: string): string {

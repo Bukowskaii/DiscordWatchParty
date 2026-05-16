@@ -46,6 +46,8 @@ export class PlexProvider implements MediaProvider {
         'X-Plex-Client-Identifier': CLIENT_ID,
         'X-Plex-Product': 'DiscordWatchParty',
         'X-Plex-Version': '1.0.0',
+        'X-Plex-Platform': 'Web',
+        'X-Plex-Device-Name': 'DiscordWatchParty Bot',
       },
     });
   }
@@ -71,16 +73,17 @@ export class PlexProvider implements MediaProvider {
     return raw ? mapMetadata(raw) : null;
   }
 
-  getHlsUrl(id: string): string {
-    const params = new URLSearchParams({
-      path: `/library/metadata/${id}`,
-      protocol: 'hls',
-      copyts: '1',
-      hasMDE: '1',
-      'X-Plex-Client-Identifier': CLIENT_ID,
-      'X-Plex-Token': this.token,
+  async fetchHlsPlaylist(id: string): Promise<string> {
+    const res = await this.http.get('/video/:/transcode/universal/start.m3u8', {
+      params: {
+        path: `/library/metadata/${id}`,
+        protocol: 'hls',
+        copyts: '1',
+        hasMDE: '1',
+      },
+      responseType: 'text',
     });
-    return `${this.url}/video/:/transcode/universal/start.m3u8?${params}`;
+    return res.data as string;
   }
 
   resolveStreamUrl(path: string): string {
