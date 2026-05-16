@@ -87,8 +87,9 @@ export class PlexProvider implements MediaProvider {
   }
 
   resolveStreamUrl(path: string): string {
-    const sep = path.includes('?') ? '&' : '?';
-    return `${this.url}${path}${sep}X-Plex-Token=${this.token}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const sep = normalizedPath.includes('?') ? '&' : '?';
+    return `${this.url}${normalizedPath}${sep}X-Plex-Token=${this.token}`;
   }
 
   getThumbUrl(id: string | undefined): string | null {
