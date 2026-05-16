@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import type { MediaItem, MediaProvider } from './types';
 
-const CLIENT_ID = 'plex4discord-bot';
+const CLIENT_ID = 'discordwatchparty-bot';
 
 interface PlexRawMetadata {
   ratingKey: string;

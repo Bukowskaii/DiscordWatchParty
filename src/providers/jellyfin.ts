@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import type { MediaItem, MediaProvider } from './types';
 
-const DEVICE_ID = 'plex4discord-bot';
+const DEVICE_ID = 'discordwatchparty-bot';
 
 interface JellyfinItem {
   Id: string;
