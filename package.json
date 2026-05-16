@@ -1,0 +1,32 @@
+{
+  "name": "plex4discord",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "deploy-commands": "tsx src/bot/deploy.ts",
+    "generate-key": "tsx src/store/generate-key.ts"
+  },
+  "dependencies": {
+    "@discordjs/rest": "^2.4.0",
+    "axios": "^1.7.9",
+    "discord-api-types": "^0.37.119",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.7",
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.2",
+    "uuid": "^11.0.3",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.7",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

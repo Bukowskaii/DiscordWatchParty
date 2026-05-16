@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Watch Party Bot</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f0f0f;
+      color: #e0e0e0;
+      font-family: system-ui, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    header img {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    #header-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #ccc;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #status {
+      font-size: 0.75rem;
+      color: #555;
+      flex-shrink: 0;
+    }
+
+    /* ── Main content ────────────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 20px;
+    }
+
+    /* ── Waiting state ───────────────────────────────────────────────────── */
+    #waiting {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      text-align: center;
+    }
+
+    #waiting img {
+      width: clamp(140px, 25vw, 220px);
+      height: clamp(140px, 25vw, 220px);
+      border-radius: 50%;
+      object-fit: cover;
+      opacity: 0.85;
+      filter: drop-shadow(0 0 24px rgba(255,255,255,0.06));
+    }
+
+    #waiting p {
+      font-size: 1rem;
+      color: #666;
+    }
+
+    /* ── Player ──────────────────────────────────────────────────────────── */
+    #now-playing-title {
+      font-size: 1rem;
+      font-weight: 600;
+      max-width: min(90vw, 900px);
+      text-align: center;
+      color: #ddd;
+    }
+
+    #player-wrap {
+      width: min(90vw, 160vh);
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* ── Controls ────────────────────────────────────────────────────────── */
+    #controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    button {
+      background: #242424;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 7px 18px;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: #303030; }
+
+    #time {
+      font-size: 0.825rem;
+      color: #888;
+      min-width: 110px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <img src="/img/logo.jpg" alt="Watch Party Bot logo" />
+    <span id="header-title">Watch Party Bot</span>
+    <span id="status">Connecting…</span>
+  </header>
+
+  <main>
+    <!-- Waiting / idle state -->
+    <div id="waiting">
+      <img src="/img/logo.jpg" alt="Watch Party Bot" />
+      <p>Waiting for the host to start something…</p>
+    </div>
+
+    <!-- Active player state (hidden until media loads) -->
+    <div id="now-playing-title" style="display:none"></div>
+    <div id="player-wrap" style="display:none">
+      <video id="video" playsinline></video>
+    </div>
+    <div id="controls" style="display:none">
+      <button id="btn-pause">Pause</button>
+      <div id="time">0:00 / 0:00</div>
+      <button id="btn-sync">Re-sync</button>
+    </div>
+  </main>
+
+  <script>
+    const token = new URLSearchParams(location.search).get('token');
+    if (!token) {
+      document.body.innerHTML = '<p style="padding:2rem;color:#e44">Invalid or expired watch link.</p>';
+      throw new Error('no token');
+    }
+
+    const video       = document.getElementById('video');
+    const playerWrap  = document.getElementById('player-wrap');
+    const waiting     = document.getElementById('waiting');
+    const controls    = document.getElementById('controls');
+    const statusEl    = document.getElementById('status');
+    const headerTitle = document.getElementById('header-title');
+    const npTitle     = document.getElementById('now-playing-title');
+    const timeEl      = document.getElementById('time');
+    const btnPause    = document.getElementById('btn-pause');
+    const btnSync     = document.getElementById('btn-sync');
+
+    let hls = null;
+    let currentMediaId = null;
+    let durationMs = 0;
+    let syncTarget = null;
+    let suppressSync = false;
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    const wsUrl = (location.protocol === 'https:' ? 'wss' : 'ws') +
+                  '://' + location.host + '/sync?token=' + token;
+    let ws;
+
+    function connect() {
+      ws = new WebSocket(wsUrl);
+      ws.onopen  = () => { statusEl.textContent = '●  Live'; statusEl.style.color = '#4caf50'; };
+      ws.onmessage = ev => handleServer(JSON.parse(ev.data));
+      ws.onclose = () => {
+        statusEl.textContent = 'Reconnecting…';
+        statusEl.style.color = '#888';
+        setTimeout(connect, 3000);
+      };
+    }
+
+    function send(msg) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    }
+
+    // ── Server message handler ────────────────────────────────────────────────
+    function handleServer(msg) {
+      switch (msg.type) {
+        case 'state':
+        case 'sync':
+          if (msg.ratingKey && msg.ratingKey !== currentMediaId) {
+            loadMedia(msg.ratingKey, msg.title, msg.durationMs ?? 0);
+          }
+          if (msg.state === 'stopped') {
+            showWaiting();
+          } else {
+            applySync(msg.state, msg.currentTimeMs);
+          }
+          break;
+
+        case 'media':
+          loadMedia(msg.ratingKey, msg.title, msg.durationMs ?? 0);
+          applySync('playing', 0);
+          break;
+
+        case 'play':
+          applySync('playing', msg.currentTimeMs ?? video.currentTime * 1000);
+          break;
+
+        case 'pause':
+          applySync('paused', msg.currentTimeMs);
+          break;
+
+        case 'seek':
+          seekTo(msg.currentTimeMs);
+          break;
+
+        case 'stopped':
+          showWaiting();
+          break;
+      }
+    }
+
+    // ── Media loading ─────────────────────────────────────────────────────────
+    function loadMedia(mediaId, title, dur) {
+      currentMediaId = mediaId;
+      durationMs = dur;
+
+      const displayTitle = title ?? '';
+      npTitle.textContent = displayTitle;
+      headerTitle.textContent = displayTitle || 'Watch Party Bot';
+
+      const src = `/stream/${token}/hls/playlist.m3u8`;
+      if (hls) { hls.destroy(); hls = null; }
+
+      if (Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true });
+        hls.loadSource(src);
+        hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src;
+      } else {
+        video.src = `/stream/${token}/direct`;
+      }
+
+      waiting.style.display = 'none';
+      npTitle.style.display = '';
+      playerWrap.style.display = '';
+      controls.style.display = '';
+    }
+
+    function showWaiting() {
+      playerWrap.style.display = 'none';
+      npTitle.style.display = 'none';
+      controls.style.display = 'none';
+      waiting.style.display = '';
+      headerTitle.textContent = 'Watch Party Bot';
+      currentMediaId = null;
+    }
+
+    // ── Sync ──────────────────────────────────────────────────────────────────
+    function applySync(state, currentTimeMs) {
+      syncTarget = { state, currentTimeMs, setAt: Date.now() };
+      if (state === 'paused') {
+        video.pause();
+        seekTo(currentTimeMs);
+      } else if (state === 'playing') {
+        seekTo(currentTimeMs);
+        video.play().catch(() => {});
+      }
+      btnPause.textContent = state === 'playing' ? 'Pause' : 'Play';
+    }
+
+    function seekTo(ms) {
+      suppressSync = true;
+      video.currentTime = ms / 1000;
+      setTimeout(() => { suppressSync = false; }, 500);
+    }
+
+    // ── Controls ──────────────────────────────────────────────────────────────
+    btnPause.addEventListener('click', () => {
+      send({ type: video.paused ? 'play' : 'pause' });
+    });
+
+    btnSync.addEventListener('click', () => {
+      if (!syncTarget) return;
+      const elapsed = syncTarget.state === 'playing' ? Date.now() - syncTarget.setAt : 0;
+      seekTo(syncTarget.currentTimeMs + elapsed);
+    });
+
+    // ── Time display + drift correction ───────────────────────────────────────
+    video.addEventListener('timeupdate', () => {
+      if (suppressSync) return;
+      const cur = video.currentTime * 1000;
+      timeEl.textContent = fmt(cur) + ' / ' + fmt(durationMs);
+
+      if (syncTarget && syncTarget.state === 'playing' && !video.paused) {
+        const expected = syncTarget.currentTimeMs + (Date.now() - syncTarget.setAt);
+        if (Math.abs(cur - expected) > 3000) seekTo(expected);
+      }
+    });
+
+    function fmt(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const h = Math.floor(m / 60);
+      if (h > 0) return h + ':' + pad(m % 60) + ':' + pad(s % 60);
+      return m + ':' + pad(s % 60);
+    }
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    connect();
+  </script>
+</body>
+</html>
