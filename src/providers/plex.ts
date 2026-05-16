@@ -20,6 +20,14 @@ interface PlexSearchHub {
   Metadata?: PlexRawMetadata[];
 }
 
+function resolveRelativeM3U8(content: string, base: string): string {
+  return content.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('http') || trimmed.startsWith('/')) return line;
+    return base + trimmed;
+  }).join('\n');
+}
+
 function mapMetadata(raw: PlexRawMetadata): MediaItem {
   return {
     id: raw.ratingKey,
@@ -74,7 +82,8 @@ export class PlexProvider implements MediaProvider {
   }
 
   async fetchHlsPlaylist(id: string): Promise<string> {
-    const res = await this.http.get('/video/:/transcode/universal/start.m3u8', {
+    const playlistBase = '/video/:/transcode/universal/';
+    const res = await this.http.get(`${playlistBase}start.m3u8`, {
       params: {
         path: `/library/metadata/${id}`,
         protocol: 'hls',
@@ -83,12 +92,14 @@ export class PlexProvider implements MediaProvider {
       },
       responseType: 'text',
     });
-    return res.data as string;
+    // Resolve relative paths to absolute so downstream handlers use the right URL
+    return resolveRelativeM3U8(res.data as string, playlistBase);
   }
 
   async fetchSubPlaylist(path: string): Promise<string> {
     const res = await this.http.get(path, { responseType: 'text' });
-    return res.data as string;
+    const base = path.substring(0, path.lastIndexOf('/') + 1);
+    return resolveRelativeM3U8(res.data as string, base);
   }
 
   resolveStreamUrl(path: string): string {
