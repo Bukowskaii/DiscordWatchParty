@@ -11,6 +11,10 @@ interface SyncMessage {
 // guildId → set of connected sockets
 const roomSockets = new Map<string, Set<WebSocket>>();
 
+export function getConnectedCount(guildId: string): number {
+  return roomSockets.get(guildId)?.size ?? 0;
+}
+
 export function broadcast(guildId: string, msg: SyncMessage): void {
   const sockets = roomSockets.get(guildId);
   if (!sockets) return;

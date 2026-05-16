@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { getProviderForGuild } from '../../providers';
 import type { MediaItem } from '../../providers';
-import { addToQueue, getOrCreateRoom, createSession } from '../../rooms/manager';
+import { addToQueue, getOrCreateRoom, createSession, setGuildName } from '../../rooms/manager';
 import { config } from '../../config';
 import { playData as data } from './definitions';
 
@@ -83,7 +83,9 @@ async function enqueue(
     return;
   }
 
-  const wasEmpty = getOrCreateRoom(guildId).queue.length === 0;
+  const room = getOrCreateRoom(guildId);
+  if (interaction.guild?.name) setGuildName(guildId, interaction.guild.name);
+  const wasEmpty = room.queue.length === 0;
   addToQueue(guildId, item);
 
   const token = createSession(guildId);

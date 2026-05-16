@@ -4,6 +4,7 @@ import type { MediaItem } from '../providers/types';
 
 export interface Room {
   guildId: string;
+  guildName?: string;
   queue: MediaItem[];
   currentIndex: number;
   state: 'playing' | 'paused' | 'stopped';
@@ -26,6 +27,15 @@ const sessions = new Map<string, Session>();
 
 export function getRoom(guildId: string): Room | undefined {
   return rooms.get(guildId);
+}
+
+export function getActiveRooms(): Room[] {
+  return [...rooms.values()].filter(r => r.state !== 'stopped' || r.queue.length > 0);
+}
+
+export function setGuildName(guildId: string, name: string): void {
+  const room = rooms.get(guildId);
+  if (room) room.guildName = name;
 }
 
 export function getOrCreateRoom(guildId: string): Room {
