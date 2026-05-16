@@ -179,3 +179,9 @@ docker compose up --build -d
 # Re-run deploy-commands if any slash commands changed
 npm run deploy-commands
 ```
+
+---
+
+## AI Assistance
+
+This project was built with the assistance of [Claude](https://claude.ai) (Anthropic). Architecture decisions, feature direction, and code review are driven by the project author. Claude serves as a development accelerator — handling implementation details, debugging, and boilerplate while human judgment guides what gets built and how.
