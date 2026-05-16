@@ -38,8 +38,8 @@ async function handleConfigure(interaction: ChatInputCommandInteraction): Promis
 
   // Test the connection before saving
   await interaction.editReply('Testing connection to your media server…');
-  const ok = await testConnection(provider, url, credential);
-  if (!ok) {
+  const result = await testConnection(provider, url, credential);
+  if (!result.ok) {
     await interaction.editReply(
       `Could not reach **${url}** with the credentials provided.\n` +
       `- Check the URL is accessible from this server\n` +
@@ -48,12 +48,16 @@ async function handleConfigure(interaction: ChatInputCommandInteraction): Promis
     return;
   }
 
-  saveGuildConfig(interaction.guildId!, provider, url, credential);
+  const resolvedUrl = result.resolvedUrl;
+  saveGuildConfig(interaction.guildId!, provider, resolvedUrl, credential);
   invalidateProvider(interaction.guildId!);
 
   const providerName = { plex: 'Plex', jellyfin: 'Jellyfin', emby: 'Emby' }[provider];
+  const urlNote = resolvedUrl !== url
+    ? `\n-# URL was automatically updated to \`${resolvedUrl}\` (redirected from \`${url}\`)`
+    : '';
   await interaction.editReply(
-    `Connected to **${providerName}** at \`${url}\`. Members can now use \`/play\` to start a watch party.`,
+    `Connected to **${providerName}** at \`${resolvedUrl}\`. Members can now use \`/play\` to start a watch party.${urlNote}`,
   );
 }
 
@@ -104,21 +108,31 @@ async function testConnection(
   provider: 'plex' | 'jellyfin' | 'emby',
   url: string,
   apiKey: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; resolvedUrl: string }> {
   try {
+    let response;
     if (provider === 'plex') {
-      await axios.get(`${url}/identity`, {
+      response = await axios.get(`${url}/identity`, {
         params: { 'X-Plex-Token': apiKey },
         timeout: 8_000,
       });
     } else {
-      await axios.get(`${url}/System/Info`, {
+      response = await axios.get(`${url}/System/Info`, {
         headers: { 'X-Emby-Token': apiKey },
         timeout: 8_000,
       });
     }
-    return true;
+
+    // axios (via follow-redirects) exposes the final URL after any redirects.
+    // Use it to capture an http→https upgrade so we store the canonical URL.
+    const finalUrl: string | undefined = response.request?.res?.responseUrl;
+    let resolvedUrl = url;
+    if (finalUrl) {
+      const parsed = new URL(finalUrl);
+      resolvedUrl = `${parsed.protocol}//${parsed.host}`;
+    }
+    return { ok: true, resolvedUrl };
   } catch {
-    return false;
+    return { ok: false, resolvedUrl: url };
   }
 }
