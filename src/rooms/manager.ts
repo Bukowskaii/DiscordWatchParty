@@ -60,7 +60,7 @@ export function addToQueue(guildId: string, item: MediaItem): Room {
 }
 
 export function startPlayback(room: Room): void {
-  room.state = 'playing';
+  room.state = 'paused';
   room.currentTimeMs = 0;
   room.lastSyncAt = Date.now();
 }

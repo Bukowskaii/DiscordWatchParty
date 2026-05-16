@@ -11,6 +11,9 @@ interface SyncMessage {
 // guildId → set of connected sockets
 const roomSockets = new Map<string, Set<WebSocket>>();
 
+// ws → display name (set on join)
+const socketNames = new Map<WebSocket, string>();
+
 export function getConnectedCount(guildId: string): number {
   return roomSockets.get(guildId)?.size ?? 0;
 }
@@ -49,11 +52,17 @@ export function attachSyncServer(httpServer: Server): void {
       } catch {
         return;
       }
-      handleClientMessage(guildId, msg);
+      handleClientMessage(guildId, ws, msg);
     });
 
     ws.on('close', () => {
+      const name = socketNames.get(ws);
       roomSockets.get(guildId)?.delete(ws);
+      socketNames.delete(ws);
+      if (name) {
+        broadcast(guildId, { type: 'notification', text: `${name} left` });
+        broadcastParticipants(guildId);
+      }
     });
   });
 
@@ -76,6 +85,16 @@ export function attachSyncServer(httpServer: Server): void {
   }, 5_000);
 }
 
+function broadcastParticipants(guildId: string): void {
+  const sockets = roomSockets.get(guildId);
+  const names = sockets
+    ? [...sockets]
+        .filter(s => s.readyState === WebSocket.OPEN && socketNames.has(s))
+        .map(s => socketNames.get(s)!)
+    : [];
+  broadcast(guildId, { type: 'participants', names });
+}
+
 function sendState(ws: WebSocket, guildId: string): void {
   const room = getRoom(guildId);
   if (!room) return;
@@ -90,16 +109,32 @@ function sendState(ws: WebSocket, guildId: string): void {
   }));
 }
 
-function handleClientMessage(guildId: string, msg: SyncMessage): void {
+function handleClientMessage(guildId: string, ws: WebSocket, msg: SyncMessage): void {
   switch (msg.type) {
+    case 'join': {
+      const raw = typeof msg.name === 'string' ? msg.name.trim().slice(0, 32) : '';
+      const name = raw || 'Someone';
+      socketNames.set(ws, name);
+      broadcast(guildId, { type: 'notification', text: `${name} joined` });
+      broadcastParticipants(guildId);
+      break;
+    }
     case 'pause': {
       const room = pauseRoom(guildId);
-      if (room) broadcast(guildId, { type: 'pause', currentTimeMs: room.currentTimeMs });
+      if (room) {
+        const name = socketNames.get(ws) ?? 'Someone';
+        broadcast(guildId, { type: 'pause', currentTimeMs: room.currentTimeMs });
+        broadcast(guildId, { type: 'notification', text: `${name} paused` });
+      }
       break;
     }
     case 'play': {
       const room = resumeRoom(guildId);
-      if (room) broadcast(guildId, { type: 'play', currentTimeMs: room.currentTimeMs });
+      if (room) {
+        const name = socketNames.get(ws) ?? 'Someone';
+        broadcast(guildId, { type: 'play', currentTimeMs: room.currentTimeMs });
+        broadcast(guildId, { type: 'notification', text: `${name} resumed` });
+      }
       break;
     }
     case 'seek': {
