@@ -44,7 +44,7 @@ export class PlexProvider implements MediaProvider {
       headers: {
         Accept: 'application/json',
         'X-Plex-Client-Identifier': CLIENT_ID,
-        'X-Plex-Product': 'Plex4Discord',
+        'X-Plex-Product': 'DiscordWatchParty',
         'X-Plex-Version': '1.0.0',
       },
     });

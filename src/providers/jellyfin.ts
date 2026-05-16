@@ -42,8 +42,8 @@ export class JellyfinProvider implements MediaProvider {
       headers: {
         Accept: 'application/json',
         'X-Emby-Token': apiKey,
-        'X-Emby-Client': 'Plex4Discord',
-        'X-Emby-Device-Name': 'Plex4Discord Bot',
+        'X-Emby-Client': 'DiscordWatchParty',
+        'X-Emby-Device-Name': 'DiscordWatchParty Bot',
         'X-Emby-Device-Id': DEVICE_ID,
         'X-Emby-Client-Version': '1.0.0',
       },

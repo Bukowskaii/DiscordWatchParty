@@ -2,7 +2,7 @@
   <img src="img/logo.jpg" alt="Watch Party Bot" width="200" />
 </p>
 
-<h1 align="center">Plex4Discord</h1>
+<h1 align="center">DiscordWatchParty</h1>
 
 <p align="center">
   A self-hosted Discord bot for synchronized watch parties powered by Plex, Jellyfin, or Emby.<br />
