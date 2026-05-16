@@ -85,6 +85,11 @@ export class JellyfinProvider implements MediaProvider {
     return res.data as string;
   }
 
+  async fetchSubPlaylist(path: string): Promise<string> {
+    const res = await this.http.get(path, { responseType: 'text' });
+    return res.data as string;
+  }
+
   resolveStreamUrl(path: string): string {
     let resolved = path;
     if (path.startsWith('http')) {
