@@ -5,12 +5,18 @@
 import 'dotenv/config';
 import { REST, Routes } from 'discord.js';
 import { config } from '../config';
-import { commandsJSON } from './commands/index';
+import {
+  setupData, playData, queueData, pauseData, resumeData, skipData, stopData,
+} from './commands/definitions';
 
 const rest = new REST().setToken(config.discord.token);
 
+const commands = [setupData, playData, queueData, pauseData, resumeData, skipData, stopData];
+
 (async () => {
-  console.log(`Registering ${commandsJSON.length} slash commands…`);
-  await rest.put(Routes.applicationCommands(config.discord.clientId), { body: commandsJSON });
+  console.log(`Registering ${commands.length} slash commands…`);
+  await rest.put(Routes.applicationCommands(config.discord.clientId), {
+    body: commands.map(c => c.toJSON()),
+  });
   console.log('Done.');
 })();

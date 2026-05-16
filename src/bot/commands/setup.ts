@@ -1,57 +1,10 @@
-import {
-  SlashCommandBuilder,
-  ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  EmbedBuilder,
-} from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import axios from 'axios';
 import { getGuildConfig, saveGuildConfig, deleteGuildConfig } from '../../store/guild-config';
 import { invalidateProvider } from '../../providers';
+import { setupData as data } from './definitions';
 
-export const data = new SlashCommandBuilder()
-  .setName('setup')
-  .setDescription('Configure this server\'s media provider')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addSubcommand(sub =>
-    sub
-      .setName('configure')
-      .setDescription('Connect a Plex, Jellyfin, or Emby server')
-      .addStringOption(opt =>
-        opt
-          .setName('provider')
-          .setDescription('Which media server are you using?')
-          .setRequired(true)
-          .addChoices(
-            { name: 'Plex', value: 'plex' },
-            { name: 'Jellyfin', value: 'jellyfin' },
-            { name: 'Emby', value: 'emby' },
-          ),
-      )
-      .addStringOption(opt =>
-        opt
-          .setName('url')
-          .setDescription('Base URL of your media server (e.g. http://192.168.1.x:32400)')
-          .setRequired(true),
-      )
-      .addStringOption(opt =>
-        opt
-          .setName('token')
-          .setDescription('Plex token — required for Plex')
-          .setRequired(false),
-      )
-      .addStringOption(opt =>
-        opt
-          .setName('api-key')
-          .setDescription('API key — required for Jellyfin / Emby')
-          .setRequired(false),
-      ),
-  )
-  .addSubcommand(sub =>
-    sub.setName('status').setDescription('Show current media server configuration'),
-  )
-  .addSubcommand(sub =>
-    sub.setName('remove').setDescription('Remove this server\'s media server configuration'),
-  );
+export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const sub = interaction.options.getSubcommand();

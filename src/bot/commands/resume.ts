@@ -1,11 +1,10 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { resumeRoom } from '../../rooms/manager';
 import { getProviderForGuild } from '../../providers';
 import { broadcast } from '../../server/sync';
+import { resumeData as data } from './definitions';
 
-export const data = new SlashCommandBuilder()
-  .setName('resume')
-  .setDescription('Resume playback for everyone');
+export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!getProviderForGuild(interaction.guildId!)) {

@@ -1,9 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { getRoom, currentItem, getLiveTimeMs } from '../../rooms/manager';
+import { queueData as data } from './definitions';
 
-export const data = new SlashCommandBuilder()
-  .setName('queue')
-  .setDescription('Show the current playback queue');
+export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const room = getRoom(interaction.guildId!);

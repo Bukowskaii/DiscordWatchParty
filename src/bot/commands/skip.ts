@@ -1,12 +1,11 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { skipRoom, currentItem, createSession } from '../../rooms/manager';
 import { getProviderForGuild } from '../../providers';
 import { broadcast } from '../../server/sync';
 import { config } from '../../config';
+import { skipData as data } from './definitions';
 
-export const data = new SlashCommandBuilder()
-  .setName('skip')
-  .setDescription('Skip to the next item in the queue');
+export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!getProviderForGuild(interaction.guildId!)) {

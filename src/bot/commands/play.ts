@@ -1,5 +1,4 @@
 import {
-  SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
   ActionRowBuilder,
@@ -11,13 +10,9 @@ import { getProviderForGuild } from '../../providers';
 import type { MediaItem } from '../../providers';
 import { addToQueue, getOrCreateRoom, createSession } from '../../rooms/manager';
 import { config } from '../../config';
+import { playData as data } from './definitions';
 
-export const data = new SlashCommandBuilder()
-  .setName('play')
-  .setDescription('Search your media server and add to the queue')
-  .addStringOption(opt =>
-    opt.setName('query').setDescription('Title to search for').setRequired(true),
-  );
+export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const guildId = interaction.guildId!;
