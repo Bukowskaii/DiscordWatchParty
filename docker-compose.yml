@@ -1,6 +1,7 @@
 services:
   nginx:
     image: nginx:alpine
+    container_name: discordwatchparty-nginx
     restart: unless-stopped
     ports:
       - "${NGINX_PORT:-8780}:80"
@@ -12,6 +13,7 @@ services:
   bot:
     image: ghcr.io/bukowskaii/discordwatchparty:latest
     # build: .  # uncomment to build locally instead of pulling from ghcr.io
+    container_name: discordwatchparty-bot
     restart: unless-stopped
     volumes:
       # Persists the SQLite database across container restarts and rebuilds
