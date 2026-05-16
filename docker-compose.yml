@@ -8,9 +8,6 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - bot
-    networks:
-      - default
-      - plex-swarm
 
   bot:
     image: ghcr.io/bukowskaii/discordwatchparty:latest
@@ -25,7 +22,3 @@ services:
     # bot and nginx can reach them via host.docker.internal:
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"
-
-networks:
-  plex-swarm:
-    external: true
