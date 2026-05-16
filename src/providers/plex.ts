@@ -86,6 +86,11 @@ export class PlexProvider implements MediaProvider {
     return res.data as string;
   }
 
+  async fetchSubPlaylist(path: string): Promise<string> {
+    const res = await this.http.get(path, { responseType: 'text' });
+    return res.data as string;
+  }
+
   resolveStreamUrl(path: string): string {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const sep = normalizedPath.includes('?') ? '&' : '?';
