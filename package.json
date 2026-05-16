@@ -1,6 +1,6 @@
 {
-  "name": "plex4discord",
-  "version": "0.1.0",
+  "name": "discordwatchparty",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
