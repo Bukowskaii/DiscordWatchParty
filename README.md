@@ -10,7 +10,8 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/Bukowskaii/DiscordWatchParty/docker.yml?branch=main&style=for-the-badge&logo=github&label=Build)](https://github.com/Bukowskaii/DiscordWatchParty/actions/workflows/docker.yml)
 [![Release](https://img.shields.io/github/v/release/Bukowskaii/DiscordWatchParty?style=for-the-badge&logo=github&label=Release)](https://github.com/Bukowskaii/DiscordWatchParty/releases/latest)
 [![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Fbukowskaii%2Fdiscordwatchparty%2Fdiscordwatchparty&query=downloadCount&style=for-the-badge&logo=docker&label=Docker%20Pulls&color=2496ed)](https://github.com/Bukowskaii/DiscordWatchParty/pkgs/container/discordwatchparty)
-[![Stars](https://img.shields.io/github/stars/Bukowskaii/DiscordWatchParty?style=for-the-badge&logo=github)](https://github.com/Bukowskaii/DiscordWatchParty/stargazers)
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/agpl-3.0)
+[![GitHub Stars](https://img.shields.io/github/stars/Bukowskaii/DiscordWatchParty?style=for-the-badge&logo=github)](https://github.com/Bukowskaii/DiscordWatchParty/stargazers)
 
 *Powered by Plex, Jellyfin, or Emby — one bot, your own media library*
 
