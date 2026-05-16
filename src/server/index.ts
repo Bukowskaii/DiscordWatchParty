@@ -65,7 +65,7 @@ export function startServer(): void {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="15" />
+  <meta http-equiv="refresh" content="5" />
   <title>DiscordWatchParty</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -87,7 +87,7 @@ export function startServer(): void {
     <img src="/img/logo.jpg" alt="logo" />
     <div>
       <h1>DiscordWatchParty</h1>
-      <p>Active sessions — refreshes every 15s</p>
+      <p>Active sessions — refreshes every 5s</p>
     </div>
   </header>
   ${body}
