@@ -105,6 +105,7 @@
     }
 
     #player-wrap {
+      position: relative;
       flex: 1;
       min-width: 0;
       aspect-ratio: 16/9;
@@ -112,6 +113,56 @@
       border-radius: 8px;
       overflow: hidden;
     }
+
+    /* Translucent participant overlay, shown only in fullscreen */
+    #fs-overlay {
+      display: none;
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      max-width: 38%;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.32);
+      border-radius: 8px;
+      backdrop-filter: blur(3px);
+      pointer-events: none;
+    }
+    #player-wrap:fullscreen #fs-overlay,
+    #player-wrap:-webkit-full-screen #fs-overlay { display: block; }
+    .fs-label {
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #ddd;
+      opacity: 0.75;
+      margin-bottom: 4px;
+    }
+    #fs-participant-list { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+    #fs-participant-list li {
+      font-size: 0.9rem;
+      color: #fff;
+      opacity: 0.85;
+      overflow-wrap: anywhere;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Fullscreen-only control bar (the page controls sit outside the player) */
+    #fs-controls {
+      display: none;
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      gap: 10px;
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 10px;
+      backdrop-filter: blur(3px);
+    }
+    #player-wrap:fullscreen #fs-controls,
+    #player-wrap:-webkit-full-screen #fs-controls { display: flex; }
+    #fs-controls button { font-size: 1.05rem; padding: 6px 14px; }
 
     video {
       width: 100%;
@@ -121,7 +172,7 @@
 
     /* ── Sidebar ─────────────────────────────────────────────────────────── */
     #sidebar {
-      width: 150px;
+      width: 210px;
       flex-shrink: 0;
       background: #141414;
       border: 1px solid #2a2a2a;
@@ -130,6 +181,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      max-height: min(90vw, 160vh);
     }
 
     .sidebar-label {
@@ -145,14 +197,13 @@
       display: flex;
       flex-direction: column;
       gap: 5px;
+      overflow-y: auto;
     }
 
     #participant-list li {
       font-size: 0.8rem;
       color: #bbb;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow-wrap: anywhere;
     }
 
     #participant-list li::before {
@@ -304,6 +355,15 @@
     <div id="player-row" style="display:none">
       <div id="player-wrap">
         <video id="video" playsinline></video>
+        <div id="fs-overlay">
+          <div class="fs-label">Watching</div>
+          <ul id="fs-participant-list"></ul>
+        </div>
+        <div id="fs-controls">
+          <button id="fs-back10" title="Back 10s">⏪</button>
+          <button id="fs-play" title="Play / Pause">⏯</button>
+          <button id="fs-exit" title="Exit fullscreen">⛶</button>
+        </div>
       </div>
       <div id="sidebar">
         <span class="sidebar-label">Watching</span>
@@ -314,6 +374,8 @@
       <button id="btn-back10">⏪ 10s</button>
       <button id="btn-pause">Pause</button>
       <div id="time">0:00 / 0:00</div>
+      <input id="vol" type="range" min="0" max="1" step="0.05" value="1" title="Volume" />
+      <button id="btn-fullscreen" title="Fullscreen">⛶</button>
       <button id="btn-sync">Re-sync</button>
     </div>
   </main>
@@ -333,9 +395,12 @@
     const headerTitle = document.getElementById('header-title');
     const npTitle     = document.getElementById('now-playing-title');
     const timeEl      = document.getElementById('time');
-    const btnPause    = document.getElementById('btn-pause');
-    const btnBack10   = document.getElementById('btn-back10');
-    const btnSync     = document.getElementById('btn-sync');
+    const btnPause      = document.getElementById('btn-pause');
+    const btnBack10     = document.getElementById('btn-back10');
+    const btnSync       = document.getElementById('btn-sync');
+    const btnFullscreen = document.getElementById('btn-fullscreen');
+    const volSlider     = document.getElementById('vol');
+    const playerWrap    = document.getElementById('player-wrap');
 
     let player = null;
     let currentMediaId = null;
@@ -372,14 +437,17 @@
       }, 3500);
     }
 
-    const participantList = document.getElementById('participant-list');
+    const participantList   = document.getElementById('participant-list');
+    const fsParticipantList = document.getElementById('fs-participant-list');
 
     function updateParticipants(names) {
-      participantList.innerHTML = '';
-      for (const name of names) {
-        const li = document.createElement('li');
-        li.textContent = name;
-        participantList.appendChild(li);
+      for (const ul of [participantList, fsParticipantList]) {
+        ul.innerHTML = '';
+        for (const name of names) {
+          const li = document.createElement('li');
+          li.textContent = name;
+          ul.appendChild(li);
+        }
       }
     }
 
@@ -511,14 +579,30 @@
     }
 
     // ── Controls ──────────────────────────────────────────────────────────────
-    btnPause.addEventListener('click', () => {
-      send({ type: video.paused ? 'play' : 'pause' });
-    });
-
-    btnBack10.addEventListener('click', () => {
+    // Shared control actions (bound to both the page bar and the fullscreen bar).
+    function togglePlayPause() { send({ type: video.paused ? 'play' : 'pause' }); }
+    function back10() {
       const target = Math.max(0, video.currentTime * 1000 - 10000);
       send({ type: 'seek', currentTimeMs: target, label: 'skipped back 10s' });
-    });
+    }
+    function toggleFullscreen() {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        const req = playerWrap.requestFullscreen || playerWrap.webkitRequestFullscreen;
+        if (req) req.call(playerWrap);
+      }
+    }
+
+    btnPause.addEventListener('click', togglePlayPause);
+    btnBack10.addEventListener('click', back10);
+    btnFullscreen.addEventListener('click', toggleFullscreen);
+    document.getElementById('fs-play').addEventListener('click', togglePlayPause);
+    document.getElementById('fs-back10').addEventListener('click', back10);
+    document.getElementById('fs-exit').addEventListener('click', toggleFullscreen);
+
+    // Volume is local-only (no sync / attribution).
+    volSlider.addEventListener('input', () => { video.volume = parseFloat(volSlider.value); });
 
     btnSync.addEventListener('click', () => {
       if (!syncTarget) return;
