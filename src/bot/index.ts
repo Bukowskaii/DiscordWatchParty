@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Events, Guild, ApplicationCommandDataResolva
 import { config } from '../config';
 import { commands, commandsJSON } from './commands/index';
 import { handleVoiceStateUpdate, cleanupOrphanChannels, startPartyReaper, handleChannelDelete } from './party';
+import { getRoom, createSession } from '../rooms/manager';
 
 export function startBot(): void {
   const client = new Client({
@@ -46,6 +47,24 @@ export function startBot(): void {
         } catch (err) {
           console.error(`Autocomplete for /${interaction.commandName} failed:`, err);
         }
+      }
+      return;
+    }
+
+    // Persistent "Get my watch link" button: issue a per-user link bound to
+    // the clicking Discord user. (Other buttons are handled by their own
+    // short-lived collectors in _media.ts.)
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('watchlink:')) {
+        const roomId = interaction.customId.slice('watchlink:'.length);
+        if (!getRoom(roomId)) {
+          await interaction.reply({ content: 'This watch party has ended.', ephemeral: true });
+          return;
+        }
+        const name = interaction.user.displayName ?? interaction.user.username;
+        const token = createSession(roomId, { id: interaction.user.id, name });
+        const url = `${config.server.publicUrl}/watch?token=${token}`;
+        await interaction.reply({ content: `🎬 Your personal watch link:\n${url}`, ephemeral: true });
       }
       return;
     }

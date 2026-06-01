@@ -13,10 +13,9 @@ import {
 } from 'discord.js';
 import { getProviderForGuild } from '../../providers';
 import type { MediaItem } from '../../providers';
-import { addToQueue, createSession, setGuildName } from '../../rooms/manager';
+import { addToQueue, setGuildName } from '../../rooms/manager';
 import type { Room } from '../../rooms/manager';
 import { resolvePartyRoom } from '../party';
-import { config } from '../../config';
 
 const PICK_TIMEOUT_MS = 60_000;
 
@@ -208,7 +207,7 @@ async function showDetail(
   await queueInto(item.id);
 }
 
-/** Fetches metadata, queues the item into the given room, replies with links. */
+/** Fetches metadata, queues it into the room, and posts a "get my link" button. */
 export async function enqueueById(
   interaction: ChatInputCommandInteraction,
   room: Room,
@@ -225,27 +224,25 @@ export async function enqueueById(
   const wasEmpty = room.queue.length === 0;
   addToQueue(room.id, item);
 
-  const token = createSession(room.id);
-  const watchUrl = `${config.server.publicUrl}/watch?token=${token}`;
   const title = displayTitle(item);
-
   const embed = new EmbedBuilder()
     .setTitle(wasEmpty ? `Now playing: ${title}` : `Queued: ${title}`)
     .setColor(wasEmpty ? 0xe5a00d : 0x5865f2)
-    .setURL(watchUrl)
-    .addFields(
-      { name: 'Voice', value: `<#${room.voiceChannelId}>`, inline: true },
-      { name: 'Watch page', value: `[Open](${watchUrl})`, inline: true },
-    )
-    .setFooter({ text: `Join the voice channel & open the link • session valid ${process.env.SESSION_TTL_MINUTES ?? 360} min` });
+    .addFields({ name: 'Voice channel', value: `<#${room.voiceChannelId}>`, inline: true })
+    .setFooter({ text: 'Tap “Get my watch link” for your personal link, then join the voice channel.' });
   const thumb = provider.getThumbUrl(item.id);
   if (thumb) embed.setThumbnail(thumb);
 
-  await interaction.editReply({
-    content: `🔊 Join <#${room.voiceChannelId}> • ▶ [Watch](${watchUrl})`,
-    embeds: [embed],
-    components: [],
-  });
+  // Persistent per-user link button — handled globally in bot/index.ts so it
+  // keeps working as people join the party over time.
+  const linkButton = new ButtonBuilder()
+    .setCustomId(`watchlink:${room.id}`)
+    .setLabel('Get my watch link')
+    .setEmoji('🎬')
+    .setStyle(ButtonStyle.Primary);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(linkButton);
+
+  await interaction.editReply({ content: `🔊 Join <#${room.voiceChannelId}>`, embeds: [embed], components: [row] });
 }
 
 /**

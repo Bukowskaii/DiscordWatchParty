@@ -1,7 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
-import { skipRoom, currentItem, createSession } from '../../rooms/manager';
+import { skipRoom, currentItem } from '../../rooms/manager';
 import { broadcast } from '../../server/sync';
-import { config } from '../../config';
 import { findUserRoom } from '../party';
 import { skipData as data } from './definitions';
 
@@ -19,6 +18,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  const name = interaction.user.displayName ?? interaction.user.username;
   const next = currentItem(updated);
   if (!next) {
     broadcast(room.id, { type: 'stopped' });
@@ -26,18 +26,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const token = createSession(room.id);
-  broadcast(room.id, {
-    type: 'media',
-    ratingKey: next.id,
-    title: next.title,
-    durationMs: next.duration,
-    watchUrl: `${config.server.publicUrl}/watch?token=${token}`,
-  });
+  // Connected watch pages reload using their own token, so no link is needed here.
+  broadcast(room.id, { type: 'media', ratingKey: next.id, title: next.title, durationMs: next.duration });
 
   const displayTitle = next.grandparentTitle
     ? `${next.grandparentTitle} S${next.parentIndex}E${next.index} – ${next.title}`
     : next.year ? `${next.title} (${next.year})` : next.title;
 
+  broadcast(room.id, { type: 'notification', text: `${name} skipped to ${displayTitle}` });
   await interaction.reply(`Skipped. Now playing: **${displayTitle}**`);
 }

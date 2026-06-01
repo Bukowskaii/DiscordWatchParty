@@ -17,7 +17,7 @@ import {
   getActiveRooms,
 } from '../rooms/manager';
 import { getProviderForGuild } from '../providers';
-import { broadcast, getConnectedCount } from '../server/sync';
+import { broadcast, getConnectedCount, broadcastParticipants } from '../server/sync';
 
 const CATEGORY_NAME = 'Watch Parties';
 const EMPTY_GRACE_MS = 120_000;
@@ -95,7 +95,7 @@ export function handleVoiceStateUpdate(oldState: VoiceState, newState: VoiceStat
       ? [...channel.members.values()].filter(m => !m.user.bot).map(m => ({ id: m.id, name: m.displayName }))
       : [];
     setVoiceMembers(channelId, members);
-    broadcast(channelId, { type: 'participants', names: members.map(m => m.name) });
+    broadcastParticipants(channelId);
   }
 }
 
