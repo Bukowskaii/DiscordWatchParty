@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # --ignore-scripts skips the better-sqlite3 native build; type-checking
+      # only needs the TypeScript sources and type definitions.
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit
