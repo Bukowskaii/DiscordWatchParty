@@ -17,7 +17,7 @@ export function getProvider(guildId: string): MediaProvider {
   let provider: MediaProvider;
   switch (cfg.provider) {
     case 'plex':
-      provider = new PlexProvider(cfg.mediaUrl, cfg.apiKey);
+      provider = new PlexProvider(cfg.mediaUrl, cfg.apiKey, cfg.playbackToken);
       break;
     case 'jellyfin':
       provider = new JellyfinProvider('jellyfin', cfg.mediaUrl, cfg.apiKey);

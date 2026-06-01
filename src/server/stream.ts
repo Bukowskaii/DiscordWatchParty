@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { resolveSession, currentItem } from '../rooms/manager';
 import { config } from '../config';
 import { getProvider } from '../providers';
+import { plexSessionId } from '../providers/plex';
 
 export const streamRouter = Router();
 
@@ -16,12 +17,11 @@ function tokenGate(req: Request, res: Response, next: () => void): void {
   next();
 }
 
-// ── HLS playlist proxy ────────────────────────────────────────────────────────
-// Segments and direct streams are handled by nginx (see nginx/default.conf).
-// Playlists still go through Node.js because the M3U8 segment URLs must be
-// rewritten to point at our proxy rather than the upstream media server.
+// ── Manifest proxy ────────────────────────────────────────────────────────────
+// Returns either a DASH MPD or HLS M3U8 depending on the provider.
+// Segment URLs inside the manifest are rewritten to point at our proxy.
 
-streamRouter.get('/:token/hls/playlist.m3u8', tokenGate, async (req: Request, res: Response) => {
+streamRouter.get('/:token/manifest', tokenGate, async (req: Request, res: Response) => {
   const room = resolveSession(req.params.token)!;
   const item = currentItem(room);
   if (!item) {
@@ -31,24 +31,42 @@ streamRouter.get('/:token/hls/playlist.m3u8', tokenGate, async (req: Request, re
 
   try {
     const provider = getProvider(room.guildId);
-    const playlist = await provider.fetchHlsPlaylist(item.id);
 
-    const proxyBase = `${config.server.publicUrl}/stream/${req.params.token}/hls`;
-    const rewritten = rewriteM3U8(playlist, proxyBase);
+    // Reuse one upstream transcode session per room. The media server only
+    // allows a single live transcode at a time (a 2nd start.mpd → 400), so
+    // every viewer/reload of the same item must share it. When the playing
+    // item changes, retire the old session before minting a new one.
+    if (room.transcodeSession && room.transcodeSession.itemId !== item.id) {
+      const stale = room.transcodeSession.id;
+      void provider.stopSession?.(stale).catch(() => { /* best-effort */ });
+      room.transcodeSession = undefined;
+    }
+    if (!room.transcodeSession) {
+      room.transcodeSession = { id: plexSessionId(), itemId: item.id };
+    }
 
-    res.set('Content-Type', 'application/vnd.apple.mpegurl');
-    res.set('Cache-Control', 'no-cache');
-    res.send(rewritten);
+    const proxyBase = `${config.server.publicUrl}/stream/${req.params.token}`;
+    const { content, protocol } = await provider.fetchPlaylist(item.id, proxyBase, room.transcodeSession.id);
+
+    if (protocol === 'dash') {
+      res.set('Content-Type', 'application/dash+xml');
+      res.set('Cache-Control', 'no-cache');
+      res.send(content);
+    } else {
+      const hlsProxyBase = `${proxyBase}/hls`;
+      const rewritten = rewriteM3U8(content, hlsProxyBase);
+      res.set('Content-Type', 'application/vnd.apple.mpegurl');
+      res.set('Cache-Control', 'no-cache');
+      res.send(rewritten);
+    }
   } catch (err) {
-    console.error('HLS playlist fetch failed:', err);
-    res.status(502).json({ error: 'Failed to fetch playlist from media server' });
+    console.error('Manifest fetch failed:', err);
+    res.status(502).json({ error: 'Failed to fetch manifest from media server' });
   }
 });
 
-// ── Sub-playlist proxy ────────────────────────────────────────────────────────
-// Plex uses two-level HLS: master playlist → media playlist (index.m3u8) → .ts
-// segments. Sub-playlists must be fetched and rewritten by Node.js (so the .ts
-// URLs inside them are also proxied), rather than passed raw through nginx.
+// ── HLS sub-playlist proxy ────────────────────────────────────────────────────
+// Jellyfin uses two-level HLS: master → media playlist → .ts segments.
 
 streamRouter.get('/:token/hls/subplaylist', tokenGate, async (req: Request, res: Response) => {
   const room = resolveSession(req.params.token)!;
@@ -60,6 +78,10 @@ streamRouter.get('/:token/hls/subplaylist', tokenGate, async (req: Request, res:
 
   try {
     const provider = getProvider(room.guildId);
+    if (!provider.fetchSubPlaylist) {
+      res.status(501).json({ error: 'Provider does not support HLS sub-playlists' });
+      return;
+    }
     const playlist = await provider.fetchSubPlaylist(segPath);
     const proxyBase = `${config.server.publicUrl}/stream/${req.params.token}/hls`;
     const rewritten = rewriteM3U8(playlist, proxyBase);
@@ -89,8 +111,6 @@ function rewriteM3U8(content: string, proxyBase: string): string {
         segPath = trimmed;
       }
 
-      // Sub-playlists go through Node.js for URL rewriting; .ts segments go
-      // through nginx auth_request for direct proxying.
       const endpoint = segPath.includes('.m3u8') ? 'subplaylist' : 'segment';
       return `${proxyBase}/${endpoint}?path=${encodeURIComponent(segPath)}`;
     })
@@ -98,10 +118,7 @@ function rewriteM3U8(content: string, proxyBase: string): string {
 }
 
 // ── nginx auth subrequest handler ─────────────────────────────────────────────
-// Called by nginx's auth_request for /stream/:token/hls/segment and
-// /stream/:token/direct. Validates the session token and returns the full
-// authenticated upstream URL in X-Upstream-URL so nginx can proxy the bytes
-// directly — Node.js is not in the data path for segments or direct streams.
+// Called by nginx for both HLS segments (?path=) and DASH segments (/dash/...).
 
 export async function internalAuthHandler(req: Request, res: Response): Promise<void> {
   const originalUri = req.headers['x-original-uri'] as string | undefined;
@@ -110,7 +127,6 @@ export async function internalAuthHandler(req: Request, res: Response): Promise<
     return;
   }
 
-  // Extract session token from the URI path: /stream/:token/hls/segment or /stream/:token/direct
   const tokenMatch = originalUri.match(/^\/stream\/([^/?]+)/);
   if (!tokenMatch) {
     res.sendStatus(400);
@@ -134,7 +150,16 @@ export async function internalAuthHandler(req: Request, res: Response): Promise<
 
   const parsed = new URL(originalUri, 'http://localhost');
 
-  // Segment request: ?path= holds the provider-relative path
+  // DASH segment: /stream/:token/dash/video/:/transcode/universal/...
+  const dashMatch = originalUri.match(/^\/stream\/[^/?]+\/dash(\/[^?]*)/);
+  if (dashMatch) {
+    const segPath = dashMatch[1] + (parsed.search || '');
+    res.set('X-Upstream-URL', provider.resolveStreamUrl(segPath));
+    res.sendStatus(200);
+    return;
+  }
+
+  // HLS segment: ?path=<provider-relative-path>
   const segPath = parsed.searchParams.get('path');
   if (segPath) {
     res.set('X-Upstream-URL', provider.resolveStreamUrl(segPath));
@@ -142,7 +167,7 @@ export async function internalAuthHandler(req: Request, res: Response): Promise<
     return;
   }
 
-  // Direct stream request: resolve from the current queue item's part key
+  // Direct stream fallback
   const item = currentItem(room);
   if (!item?.partKey) {
     res.sendStatus(404);

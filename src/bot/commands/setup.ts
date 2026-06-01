@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import axios from 'axios';
 import { getGuildConfig, saveGuildConfig, deleteGuildConfig } from '../../store/guild-config';
 import { invalidateProvider } from '../../providers';
+import { fetchPlaybackToken } from '../../providers/plex';
 import { setupData as data } from './definitions';
 
 export { data };
@@ -23,6 +24,8 @@ async function handleConfigure(interaction: ChatInputCommandInteraction): Promis
   const url = interaction.options.getString('url', true).replace(/\/$/, '');
   const token = interaction.options.getString('token');
   const apiKey = interaction.options.getString('api-key');
+  const playbackTokenInput = interaction.options.getString('playback-token');
+  const playbackUser = interaction.options.getString('playback-user');
 
   // Validate required credential for the chosen provider
   const isPlex = provider === 'plex';
@@ -49,15 +52,67 @@ async function handleConfigure(interaction: ChatInputCommandInteraction): Promis
   }
 
   const resolvedUrl = result.resolvedUrl;
-  saveGuildConfig(interaction.guildId!, provider, resolvedUrl, credential);
+
+  // Playback identity (Plex only): a pasted token wins; otherwise look up a
+  // Home user by name and auto-fetch their token. If neither is given, keep
+  // any previously-configured playback token/user.
+  const existing = getGuildConfig(interaction.guildId!);
+  let playbackToken: string | null | undefined = existing?.playbackToken;
+  let playbackUserName: string | null | undefined = existing?.playbackUser;
+
+  const clearPlayback =
+    (playbackUser ?? playbackTokenInput ?? '').trim().toLowerCase() === 'none';
+
+  if (isPlex && clearPlayback) {
+    // Escape hatch: revert to playing under the admin account.
+    playbackToken = null;
+    playbackUserName = null;
+  } else if (isPlex && playbackTokenInput) {
+    // Validate the token actually has library access (auth-checked endpoint).
+    if (!(await tokenHasAccess('plex', resolvedUrl, playbackTokenInput))) {
+      await interaction.editReply(
+        'Connected, but the **playback-token** cannot access your libraries (got an auth error). ' +
+        'Make sure that user is shared into your server, then try again.',
+      );
+      return;
+    }
+    playbackToken = playbackTokenInput;
+    playbackUserName = playbackUser ?? '(token provided directly)';
+  } else if (isPlex && playbackUser) {
+    await interaction.editReply(`Connected. Looking up shared user **${playbackUser}**…`);
+    const resolved = await fetchPlaybackToken(credential, resolvedUrl, playbackUser);
+    if (!resolved) {
+      await interaction.editReply(
+        `Connected, but couldn't find a share for **${playbackUser}** on this server.\n` +
+        '- The name must match a user this server is shared with (managed Home user or invited account)\n' +
+        '- Make sure that user has at least one library shared from **Settings → Users & Sharing**\n' +
+        '- The admin `token` must be the server owner',
+      );
+      return;
+    }
+    if (!(await tokenHasAccess('plex', resolvedUrl, resolved))) {
+      await interaction.editReply(
+        `Found **${playbackUser}**, but their access token was rejected by the server. ` +
+        'Re-check the libraries shared with them in Plex, then try again.',
+      );
+      return;
+    }
+    playbackToken = resolved;
+    playbackUserName = playbackUser;
+  }
+
+  saveGuildConfig(interaction.guildId!, provider, resolvedUrl, credential, playbackToken, playbackUserName);
   invalidateProvider(interaction.guildId!);
 
   const providerName = { plex: 'Plex', jellyfin: 'Jellyfin', emby: 'Emby' }[provider];
   const urlNote = resolvedUrl !== url
     ? `\n-# URL was automatically updated to \`${resolvedUrl}\` (redirected from \`${url}\`)`
     : '';
+  const playbackNote = isPlex && playbackToken
+    ? `\n-# Playback will be attributed to **${playbackUserName ?? 'a dedicated user'}**.`
+    : '';
   await interaction.editReply(
-    `Connected to **${providerName}** at \`${resolvedUrl}\`. Members can now use \`/play\` to start a watch party.${urlNote}`,
+    `Connected to **${providerName}** at \`${resolvedUrl}\`. Members can now use \`/play\` to start a watch party.${urlNote}${playbackNote}`,
   );
 }
 
@@ -74,18 +129,39 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
     return;
   }
 
+  await interaction.deferReply({ ephemeral: true });
+
+  // Live-check both tokens against an auth-required endpoint so the status
+  // reflects whether they actually work right now (not just that they're set).
+  const adminOk = await tokenHasAccess(cfg.provider, cfg.mediaUrl, cfg.apiKey);
+
+  let playbackValue: string;
+  let playbackOk = true;
+  if (!cfg.playbackToken) {
+    playbackValue = 'Main account (admin token)';
+  } else {
+    const who = cfg.playbackUser ?? '(name not recorded)';
+    playbackOk = await tokenHasAccess(cfg.provider, cfg.mediaUrl, cfg.playbackToken);
+    playbackValue =
+      `**${who}**\n` +
+      `token \`${cfg.playbackToken.slice(0, 6)}…\` (${cfg.playbackToken.length} chars)\n` +
+      `${playbackOk ? '✅ token works' : '❌ token rejected — playback will 403'}`;
+  }
+
   const providerName = { plex: 'Plex', jellyfin: 'Jellyfin', emby: 'Emby' }[cfg.provider];
+  const allOk = adminOk && playbackOk;
   const embed = new EmbedBuilder()
     .setTitle('Media server configuration')
     .addFields(
       { name: 'Provider', value: providerName, inline: true },
       { name: 'URL', value: cfg.mediaUrl, inline: true },
-      { name: 'API key', value: '`' + cfg.apiKey.slice(0, 6) + '…`', inline: true },
       { name: 'Configured', value: `<t:${Math.floor(cfg.configuredAt / 1000)}:R>`, inline: true },
+      { name: 'Admin token', value: `\`${cfg.apiKey.slice(0, 6)}…\` ${adminOk ? '✅ works' : '❌ rejected'}`, inline: false },
+      { name: 'Playback identity', value: playbackValue, inline: false },
     )
-    .setColor(0x5865f2);
+    .setColor(allOk ? 0x57f287 : 0xed4245);
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.editReply({ embeds: [embed] });
 }
 
 // ── /setup remove ─────────────────────────────────────────────────────────────
@@ -100,6 +176,36 @@ async function handleRemove(interaction: ChatInputCommandInteraction): Promise<v
       : 'No configuration found for this server.',
     ephemeral: true,
   });
+}
+
+// ── Token access check ────────────────────────────────────────────────────────
+// Unlike the connection test (which hits Plex's unauthenticated /identity),
+// this calls an endpoint that REQUIRES a valid token, so it actually verifies
+// the credential can access libraries — i.e. that playback won't 403.
+
+async function tokenHasAccess(
+  provider: 'plex' | 'jellyfin' | 'emby',
+  url: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    if (provider === 'plex') {
+      const res = await axios.get(`${url}/library/sections`, {
+        params: { 'X-Plex-Token': token },
+        timeout: 8_000,
+        validateStatus: () => true,
+      });
+      return res.status === 200;
+    }
+    const res = await axios.get(`${url}/Library/MediaFolders`, {
+      headers: { 'X-Emby-Token': token },
+      timeout: 8_000,
+      validateStatus: () => true,
+    });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
 }
 
 // ── Connection test ───────────────────────────────────────────────────────────

@@ -17,6 +17,9 @@ export const config = {
   discord: {
     token: required('DISCORD_BOT_TOKEN'),
     clientId: required('DISCORD_CLIENT_ID'),
+    // Optional: when set, deploy-commands registers to this guild only
+    // (updates are instant). Leave unset to register globally (~1h propagation).
+    guildId: optional('DISCORD_GUILD_ID') || undefined,
   },
   server: {
     port: 3000,

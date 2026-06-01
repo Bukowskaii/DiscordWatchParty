@@ -1,32 +1,33 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { skipRoom, currentItem, createSession } from '../../rooms/manager';
-import { getProviderForGuild } from '../../providers';
 import { broadcast } from '../../server/sync';
 import { config } from '../../config';
+import { findUserRoom } from '../party';
 import { skipData as data } from './definitions';
 
 export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!getProviderForGuild(interaction.guildId!)) {
-    await interaction.reply({ content: 'No media server configured. Run `/setup configure` first.', ephemeral: true });
+  const room = await findUserRoom(interaction);
+  if (!room) {
+    await interaction.reply({ content: "You're not in a watch party. Join a party voice channel or start one with `/play`.", ephemeral: true });
     return;
   }
-  const room = skipRoom(interaction.guildId!);
-  if (!room) {
+  const updated = skipRoom(room.id);
+  if (!updated) {
     await interaction.reply({ content: 'Nothing in the queue.', ephemeral: true });
     return;
   }
 
-  const next = currentItem(room);
+  const next = currentItem(updated);
   if (!next) {
-    broadcast(room.guildId, { type: 'stopped' });
+    broadcast(room.id, { type: 'stopped' });
     await interaction.reply('Queue finished.');
     return;
   }
 
-  const token = createSession(room.guildId);
-  broadcast(room.guildId, {
+  const token = createSession(room.id);
+  broadcast(room.id, {
     type: 'media',
     ratingKey: next.id,
     title: next.title,

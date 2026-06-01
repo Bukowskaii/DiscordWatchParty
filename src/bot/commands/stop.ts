@@ -1,21 +1,19 @@
-import { ChatInputCommandInteraction } from 'discord.js';
-import { stopRoom } from '../../rooms/manager';
-import { getProviderForGuild } from '../../providers';
-import { broadcast } from '../../server/sync';
+import { ChatInputCommandInteraction, ChannelType, VoiceBasedChannel } from 'discord.js';
+import { findUserRoom, teardownParty } from '../party';
 import { stopData as data } from './definitions';
 
 export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!getProviderForGuild(interaction.guildId!)) {
-    await interaction.reply({ content: 'No media server configured. Run `/setup configure` first.', ephemeral: true });
-    return;
-  }
-  const room = stopRoom(interaction.guildId!);
+  const room = await findUserRoom(interaction);
   if (!room) {
-    await interaction.reply({ content: 'Nothing is playing.', ephemeral: true });
+    await interaction.reply({ content: "You're not in a watch party.", ephemeral: true });
     return;
   }
-  broadcast(room.guildId, { type: 'stopped' });
-  await interaction.reply('Stopped and queue cleared.');
+
+  const channel = interaction.guild?.channels.cache.get(room.voiceChannelId);
+  const voiceChannel = channel?.type === ChannelType.GuildVoice ? (channel as VoiceBasedChannel) : null;
+
+  await teardownParty(room.id, voiceChannel);
+  await interaction.reply('Stopped the watch party and removed its voice channel.');
 }

@@ -1,13 +1,14 @@
 import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
-import { getRoom, currentItem, getLiveTimeMs } from '../../rooms/manager';
+import { currentItem, getLiveTimeMs } from '../../rooms/manager';
+import { findUserRoom } from '../party';
 import { queueData as data } from './definitions';
 
 export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const room = getRoom(interaction.guildId!);
+  const room = await findUserRoom(interaction);
   if (!room || room.queue.length === 0) {
-    await interaction.reply({ content: 'The queue is empty.', ephemeral: true });
+    await interaction.reply({ content: "The queue is empty (or you're not in a watch party).", ephemeral: true });
     return;
   }
 
