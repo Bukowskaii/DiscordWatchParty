@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, Events, Guild, ApplicationCommandDataResolvable } from 'discord.js';
 import { config } from '../config';
 import { commands, commandsJSON } from './commands/index';
-import { handleVoiceStateUpdate, cleanupOrphanChannels, startPartyReaper } from './party';
+import { handleVoiceStateUpdate, cleanupOrphanChannels, startPartyReaper, handleChannelDelete } from './party';
 
 export function startBot(): void {
   const client = new Client({
@@ -33,6 +33,9 @@ export function startBot(): void {
   // Track who's in each party voice channel (drives the watch-page participant
   // list and empty-channel cleanup).
   client.on(Events.VoiceStateUpdate, (oldState, newState) => handleVoiceStateUpdate(oldState, newState));
+
+  // If an admin deletes a party's voice channel directly, clear its room state.
+  client.on(Events.ChannelDelete, channel => handleChannelDelete(channel.id));
 
   client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isAutocomplete()) {

@@ -144,6 +144,11 @@ export async function teardownParty(roomId: string, channel: VoiceBasedChannel |
   if (channel) await channel.delete().catch(() => {});
 }
 
+/** If a party's voice channel is deleted in Discord, clear its room state. */
+export function handleChannelDelete(channelId: string): void {
+  if (getRoom(channelId)) void teardownParty(channelId, null);
+}
+
 /** On startup, remove leftover empty party channels (room state is gone after a restart). */
 export async function cleanupOrphanChannels(guild: Guild): Promise<void> {
   const category = guild.channels.cache.find(
