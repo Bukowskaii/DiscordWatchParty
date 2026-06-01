@@ -70,7 +70,7 @@ export class JellyfinProvider implements MediaProvider {
     return res.data ? mapItem(res.data as JellyfinItem) : null;
   }
 
-  async fetchHlsPlaylist(id: string): Promise<string> {
+  async fetchPlaylist(id: string, _proxyBase: string, _sessionId?: string): Promise<{ content: string; protocol: 'hls' }> {
     const res = await this.http.get(`/Videos/${id}/master.m3u8`, {
       params: {
         api_key: this.apiKey,
@@ -82,7 +82,7 @@ export class JellyfinProvider implements MediaProvider {
       },
       responseType: 'text',
     });
-    return res.data as string;
+    return { content: res.data as string, protocol: 'hls' };
   }
 
   async fetchSubPlaylist(path: string): Promise<string> {

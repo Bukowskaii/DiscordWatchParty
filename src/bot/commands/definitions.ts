@@ -36,6 +36,18 @@ export const setupData = new SlashCommandBuilder()
           .setName('api-key')
           .setDescription('API key — required for Jellyfin / Emby')
           .setRequired(false),
+      )
+      .addStringOption(opt =>
+        opt
+          .setName('playback-user')
+          .setDescription('Plex only: shared user name to play as (auto-fetches token). Use "none" to revert to admin.')
+          .setRequired(false),
+      )
+      .addStringOption(opt =>
+        opt
+          .setName('playback-token')
+          .setDescription('Plex only: paste a separate user token directly (alternative to playback-user)')
+          .setRequired(false),
       ),
   )
   .addSubcommand(sub =>
@@ -49,7 +61,14 @@ export const playData = new SlashCommandBuilder()
   .setName('play')
   .setDescription('Search your media server and add to the queue')
   .addStringOption(opt =>
-    opt.setName('query').setDescription('Title to search for').setRequired(true),
+    opt.setName('query').setDescription('Title to search for').setRequired(true).setAutocomplete(true),
+  );
+
+export const searchData = new SlashCommandBuilder()
+  .setName('search')
+  .setDescription('Search your library and preview a result before queueing')
+  .addStringOption(opt =>
+    opt.setName('query').setDescription('Title to search for').setRequired(true).setAutocomplete(true),
   );
 
 export const queueData = new SlashCommandBuilder()

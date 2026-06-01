@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/img/logo.jpg" />
   <title>Watch Party Bot</title>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/shaka-player@4/dist/shaka-player.compiled.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -228,18 +229,6 @@
       margin-top: -8px;
     }
 
-    #name-input {
-      background: #111;
-      border: 1px solid #333;
-      border-radius: 6px;
-      color: #e0e0e0;
-      font-size: 0.95rem;
-      padding: 9px 12px;
-      outline: none;
-      text-align: center;
-    }
-    #name-input:focus { border-color: #555; }
-
     #name-submit {
       background: #5865f2;
       border: none;
@@ -285,12 +274,11 @@
 </head>
 <body>
 
-  <!-- Name prompt (shown before joining) -->
+  <!-- Join gate (the click also unlocks browser autoplay) -->
   <div id="name-overlay">
     <div id="name-dialog">
       <h2>Join the watch party</h2>
-      <p>What should we call you?</p>
-      <input id="name-input" type="text" maxlength="32" placeholder="Your name" autocomplete="off" />
+      <p>Playback stays in sync with everyone else. Join the party's voice channel to show up in the Watching list.</p>
       <button id="name-submit">Join</button>
     </div>
   </div>
@@ -347,30 +335,26 @@
     const btnPause    = document.getElementById('btn-pause');
     const btnSync     = document.getElementById('btn-sync');
 
-    let hls = null;
+    let player = null;
     let currentMediaId = null;
     let durationMs = 0;
     let syncTarget = null;
     let suppressSync = false;
 
-    // ── Name prompt ───────────────────────────────────────────────────────────
-    let localName = '';
+    // ── Join gate ───────────────────────────────────────────────────────────
+    // No name needed — the Watching list is driven by who's in the voice
+    // channel. This click also satisfies the browser's autoplay gesture
+    // requirement so synced playback can start.
     const nameOverlay = document.getElementById('name-overlay');
-    const nameInput   = document.getElementById('name-input');
     const nameSubmit  = document.getElementById('name-submit');
 
-    function submitName() {
-      const raw = nameInput.value.trim().slice(0, 32);
-      localName = raw || 'Anonymous';
+    function joinParty() {
       nameOverlay.style.display = 'none';
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'join', name: localName }));
-      }
+      // If something is already playing, start it now (we're inside the gesture).
+      if (syncTarget) applySync(syncTarget.state, syncTarget.currentTimeMs);
     }
 
-    nameSubmit.addEventListener('click', submitName);
-    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitName(); });
-    nameInput.focus();
+    nameSubmit.addEventListener('click', joinParty);
 
     // ── Toast notifications ───────────────────────────────────────────────────
     const notifContainer = document.getElementById('notifications');
@@ -407,7 +391,6 @@
       ws.onopen  = () => {
         statusEl.textContent = '●  Live';
         statusEl.style.color = '#4caf50';
-        if (localName) ws.send(JSON.stringify({ type: 'join', name: localName }));
       };
       ws.onmessage = ev => handleServer(JSON.parse(ev.data));
       ws.onclose = () => {
@@ -468,7 +451,9 @@
     }
 
     // ── Media loading ─────────────────────────────────────────────────────────
-    function loadMedia(mediaId, title, dur) {
+    shaka.polyfill.installAll();
+
+    async function loadMedia(mediaId, title, dur) {
       currentMediaId = mediaId;
       durationMs = dur;
 
@@ -476,23 +461,17 @@
       npTitle.textContent = displayTitle;
       headerTitle.textContent = displayTitle || 'Watch Party Bot';
 
-      const src = `/stream/${token}/hls/playlist.m3u8`;
-      if (hls) { hls.destroy(); hls = null; }
-
-      if (Hls.isSupported()) {
-        hls = new Hls({
-          enableWorker: true,
-          startPosition: 0,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 120,
-          startFragPrefetch: true,
-        });
-        hls.loadSource(src);
-        hls.attachMedia(video);
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = src;
+      if (!player) {
+        player = new shaka.Player();
+        await player.attach(video);
       } else {
-        video.src = `/stream/${token}/direct`;
+        await player.unload();
+      }
+
+      try {
+        await player.load(`/stream/${token}/manifest`);
+      } catch (err) {
+        console.error('Shaka load error:', err);
       }
 
       waiting.style.display = 'none';

@@ -4,6 +4,7 @@ import express from 'express';
 import { config } from '../config';
 import { streamRouter, internalAuthHandler } from './stream';
 import { attachSyncServer } from './sync';
+import { startTimelineReporter } from './timeline';
 import { resolveSession, currentItem, getActiveRooms, getLiveTimeMs } from '../rooms/manager';
 import { getConnectedCount } from './sync';
 
@@ -37,9 +38,9 @@ export function startServer(): void {
     const rooms = getActiveRooms();
     const cards = rooms.map(room => {
       const item = currentItem(room);
-      const viewers = getConnectedCount(room.guildId);
+      const viewers = getConnectedCount(room.id);
       const posMs = getLiveTimeMs(room);
-      const name = room.guildName ?? `Server ${room.guildId}`;
+      const name = `${room.guildName ?? `Server ${room.guildId}`} — ${room.channelName}`;
       const title = item ? formatTitle(item) : 'Nothing playing';
       const queue = room.queue.length;
       const pos = item ? `${fmtMs(posMs)} / ${fmtMs(item.duration)}` : '';
@@ -114,6 +115,7 @@ export function startServer(): void {
 
   const httpServer = http.createServer(app);
   attachSyncServer(httpServer);
+  startTimelineReporter();
 
   httpServer.listen(config.server.port, () => {
     console.log(`Web server listening on port ${config.server.port}`);

@@ -1,21 +1,22 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { resumeRoom } from '../../rooms/manager';
-import { getProviderForGuild } from '../../providers';
 import { broadcast } from '../../server/sync';
+import { findUserRoom } from '../party';
 import { resumeData as data } from './definitions';
 
 export { data };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!getProviderForGuild(interaction.guildId!)) {
-    await interaction.reply({ content: 'No media server configured. Run `/setup configure` first.', ephemeral: true });
+  const room = await findUserRoom(interaction);
+  if (!room) {
+    await interaction.reply({ content: "You're not in a watch party. Join a party voice channel or start one with `/play`.", ephemeral: true });
     return;
   }
-  const room = resumeRoom(interaction.guildId!);
-  if (!room) {
+  const updated = resumeRoom(room.id);
+  if (!updated) {
     await interaction.reply({ content: 'Nothing is paused.', ephemeral: true });
     return;
   }
-  broadcast(room.guildId, { type: 'play', currentTimeMs: room.currentTimeMs });
+  broadcast(room.id, { type: 'play', currentTimeMs: updated.currentTimeMs });
   await interaction.reply('Resumed.');
 }
