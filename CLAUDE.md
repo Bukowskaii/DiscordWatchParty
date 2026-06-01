@@ -56,7 +56,7 @@ Sync flow: browser ↔ WebSocket (`/sync?token=…`) ↔ in-memory room state. T
 
 **Code changes** (rebuild): `docker compose up --build -d`. The bot **registers slash commands automatically** on startup and on `GuildCreate` (per-guild, instant) — no separate deploy step. `npm run deploy-commands` / `node dist/bot/deploy.js` still exist for manual use (guild-scoped if `DISCORD_GUILD_ID` is set, else global).
 
-The deployment lives on **BUKO-CORE** at `/docker/discordwatchparty/` (exposed over SMB at `\\BUKO-CORE\docker\discordwatchparty\`). Source is built from `./source` via the compose `build:` context, so changed files must be copied under `source/`.
+On a self-hosted deployment the app typically lives in a directory like `/docker/discordwatchparty/`. When building from source on the host, the compose `build:` context points at `./source`, so changed files must be copied under `source/` before rebuilding.
 
 The bot needs the **Manage Channels** permission (create/delete party VCs) and the **Guild Voice States** intent (not privileged).
 
