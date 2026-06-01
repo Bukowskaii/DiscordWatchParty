@@ -35,10 +35,10 @@ The features below describe the validated **Plex** experience. Jellyfin/Emby may
 ## How it works
 
 1. A guild admin runs `/setup configure` once to connect their Plex server.
-2. A member runs `/play <title>`. The bot **creates a voice channel** for the watch party (under a "Watch Parties" category) and posts an embed with a link to the voice channel and a link to the watch page.
-3. Everyone joins the voice channel to hang out, and opens the watch link in their browser — playback is synchronized automatically over WebSocket.
-4. Pause / resume / skip / seek work from both Discord commands and the watch page, and apply to everyone in that party.
-5. The participant list on the watch page reflects who's currently in the party's voice channel.
+2. A member runs `/play <title>`. The bot **creates a voice channel** for the watch party (under a "Watch Parties" category) and posts an embed with the voice channel and a **"Get my watch link"** button.
+3. Each viewer taps the button for their **own** watch link (so the party knows who's who), opens it in the browser, and joins the voice channel — playback is synchronized automatically over WebSocket.
+4. Pause / resume / skip / back-10s work from both Discord commands and the watch page, apply to everyone in that party, and show a toast of **who** did it.
+5. The participant list reflects who's in the voice channel **and** who's watching via their link (web-only viewers are marked).
 
 Each watch party is its own voice channel, so **a single server can run several parties at once** — different groups watching different things. Within one party, everyone shares a single upstream transcode (N viewers ≈ the load of one).
 
