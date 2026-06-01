@@ -32,6 +32,8 @@ export interface Room {
 interface Session {
   token: string;
   roomId: string;
+  /** The Discord user this link was issued to (per-user links). */
+  viewer?: VoiceMember;
   expiresAt: number;
 }
 
@@ -176,10 +178,10 @@ export function currentItem(room: Room): MediaItem | null {
 
 // ── Session (watch token) helpers ────────────────────────────────────────────
 
-export function createSession(roomId: string): string {
+export function createSession(roomId: string, viewer?: VoiceMember): string {
   purgeExpiredSessions();
   const token = randomUUID();
-  sessions.set(token, { token, roomId, expiresAt: Date.now() + config.sessionTtlMs });
+  sessions.set(token, { token, roomId, viewer, expiresAt: Date.now() + config.sessionTtlMs });
   return token;
 }
 
@@ -190,6 +192,13 @@ export function resolveSession(token: string): Room | null {
     return null;
   }
   return rooms.get(session.roomId) ?? null;
+}
+
+/** The Discord user a watch token was issued to, if any. */
+export function resolveSessionViewer(token: string): VoiceMember | null {
+  const session = sessions.get(token);
+  if (!session || session.expiresAt < Date.now()) return null;
+  return session.viewer ?? null;
 }
 
 export function resolveSessionRoomId(token: string): string | null {

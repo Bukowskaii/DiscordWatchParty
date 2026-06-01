@@ -17,6 +17,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.reply({ content: 'Nothing is paused.', ephemeral: true });
     return;
   }
+  const name = interaction.user.displayName ?? interaction.user.username;
   broadcast(room.id, { type: 'play', currentTimeMs: updated.currentTimeMs });
+  broadcast(room.id, { type: 'notification', text: `${name} resumed` });
   await interaction.reply('Resumed.');
 }

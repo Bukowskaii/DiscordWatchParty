@@ -311,6 +311,7 @@
       </div>
     </div>
     <div id="controls" style="display:none">
+      <button id="btn-back10">⏪ 10s</button>
       <button id="btn-pause">Pause</button>
       <div id="time">0:00 / 0:00</div>
       <button id="btn-sync">Re-sync</button>
@@ -333,6 +334,7 @@
     const npTitle     = document.getElementById('now-playing-title');
     const timeEl      = document.getElementById('time');
     const btnPause    = document.getElementById('btn-pause');
+    const btnBack10   = document.getElementById('btn-back10');
     const btnSync     = document.getElementById('btn-sync');
 
     let player = null;
@@ -511,6 +513,11 @@
     // ── Controls ──────────────────────────────────────────────────────────────
     btnPause.addEventListener('click', () => {
       send({ type: video.paused ? 'play' : 'pause' });
+    });
+
+    btnBack10.addEventListener('click', () => {
+      const target = Math.max(0, video.currentTime * 1000 - 10000);
+      send({ type: 'seek', currentTimeMs: target, label: 'skipped back 10s' });
     });
 
     btnSync.addEventListener('click', () => {
