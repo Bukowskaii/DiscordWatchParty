@@ -100,7 +100,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.notes.outputs.subject }}
+          # GitHub prepends `body` to the auto-generated "What's Changed" notes.
+          # (No append_body: it appends to any *existing* release body, which
+          # accumulates the notes across re-runs of the same tag.)
           body: ${{ steps.notes.outputs.body }}
-          # Append GitHub's auto-generated "What's Changed" after the curated notes.
-          append_body: true
           generate_release_notes: true
