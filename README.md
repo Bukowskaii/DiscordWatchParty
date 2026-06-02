@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="img/logo.jpg" alt="Watch Party Bot" width="200" />
+<img src="img/watch-page.png" alt="The watch page: Shaka Player streaming from Plex in the browser, with party playback controls and the live participant list" width="720" />
 
 # DiscordWatchParty
 
@@ -39,6 +39,21 @@ The features below describe the validated **Plex** experience. Jellyfin/Emby may
 3. Each viewer taps the button for their **own** watch link (so the party knows who's who), opens it in the browser, and joins the voice channel — playback is synchronized automatically over WebSocket.
 4. Pause / resume / skip / back-10s work from both Discord commands and the watch page, apply to everyone in that party, and show a toast of **who** did it.
 5. The participant list reflects who's in the voice channel **and** who's watching via their link (web-only viewers are marked).
+
+<p align="center">
+  <img src="img/start-stream.gif" alt="Running /play: searching by title, then the bot posts an embed with the watch-party voice channel and a Get my watch link button" width="640" />
+  <br /><em>Starting a party: <code>/play</code> &rarr; the bot posts the voice channel and a personal-link button.</em>
+</p>
+
+<p align="center">
+  <img src="img/watch-link.png" alt="The ephemeral, per-user personal watch link message, visible only to the requester (token redacted)" width="560" />
+  <br /><em>Each viewer taps the button for their own session-scoped link &mdash; only they can see it.</em>
+</p>
+
+<p align="center">
+  <img src="img/toast-notifs.png" alt="On-page toast notifications showing which participant skipped back 10 seconds and resumed playback" width="280" />
+  <br /><em>Every control action is attributed &mdash; the party sees who paused, skipped, or resumed.</em>
+</p>
 
 Each watch party is its own voice channel, so **a single server can run several parties at once** — different groups watching different things. Within one party, everyone shares a single upstream transcode (N viewers ≈ the load of one).
 
@@ -139,6 +154,10 @@ Run this in your Discord server (requires **Manage Server** permission):
 > Find your Plex token: [support.plex.tv/articles/204059436](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
 
 The bot tests the connection (and verifies library access) before saving. `/setup status` shows a live health check of the stored credentials.
+
+<p align="center">
+  <img src="img/setup-status.png" alt="/setup status output showing provider, URL, admin-token validity, and playback identity, with all credentials redacted" width="460" />
+</p>
 
 ### Optional: play under a separate user
 
