@@ -24,6 +24,9 @@ export const config = {
   server: {
     port: 3000,
     publicUrl: required('PUBLIC_URL').replace(/\/$/, ''),
+    // Internal URL the bot uses to reach nginx (the cache layer) for pacer
+    // segment pre-fetches. Defaults to the compose service name.
+    nginxInternalUrl: optional('NGINX_INTERNAL_URL', 'http://nginx').replace(/\/$/, ''),
   },
   sessionTtlMs: parseInt(optional('SESSION_TTL_MINUTES', '360'), 10) * 60 * 1000,
 };

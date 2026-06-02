@@ -5,6 +5,7 @@ import { config } from '../config';
 import { streamRouter, internalAuthHandler } from './stream';
 import { attachSyncServer } from './sync';
 import { startTimelineReporter } from './timeline';
+import { startPacer } from './pacer';
 import { resolveSession, currentItem, getActiveRooms, getLiveTimeMs } from '../rooms/manager';
 import { getConnectedCount } from './sync';
 
@@ -116,6 +117,7 @@ export function startServer(): void {
   const httpServer = http.createServer(app);
   attachSyncServer(httpServer);
   startTimelineReporter();
+  startPacer();
 
   httpServer.listen(config.server.port, () => {
     console.log(`Web server listening on port ${config.server.port}`);
