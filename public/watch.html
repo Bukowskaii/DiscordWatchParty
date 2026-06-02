@@ -545,7 +545,7 @@
           break;
 
         case 'seek':
-          seekTo(msg.currentTimeMs);
+          seekTo(followTarget(msg.currentTimeMs, 0));
           break;
 
         case 'stopped':
@@ -591,19 +591,80 @@
       waiting.style.display = '';
       headerTitle.textContent = 'Watch Party Bot';
       currentMediaId = null;
+      if (rampTimer) { clearTimeout(rampTimer); rampTimer = null; }
+      syncTarget = null;
+    }
+
+    // One Plex transcode produces segments at ~real time, so chasing the bleeding
+    // live edge stalls (the next segment isn't muxed yet). Play LIVE_DELAY_MS behind
+    // the room's live position: every client then requests segments produced seconds
+    // ago — served from the nginx cache — while staying in sync with each other
+    // (the same offset is applied everywhere). ~15s of lag is invisible for an
+    // on-demand watch party.
+    const LIVE_DELAY_MS  = 20000;
+    // Drift handling. A small drift is nudged only when the player has data to play
+    // (seeking mid-buffer flushes the buffer). A large drift means the client is
+    // stuck replaying old content (stalled behind the group); hard-seek back even
+    // while buffering, or readyState<3 traps it permanently out of sync.
+    const SOFT_DRIFT_MS  = 5000;
+    const HARD_RESYNC_MS = 12000;
+
+    // Wall position to seek to when following the room's live playback: shifted
+    // behind the live edge by LIVE_DELAY_MS and clamped to the start of the media.
+    function followTarget(serverMs, elapsed) {
+      return Math.max(0, serverMs + (elapsed || 0) - LIVE_DELAY_MS);
     }
 
     // ── Sync ──────────────────────────────────────────────────────────────────
+    let rampTimer = null;
+
     function applySync(state, currentTimeMs) {
       syncTarget = { state, currentTimeMs, setAt: Date.now() };
       if (state === 'paused') {
+        if (rampTimer) { clearTimeout(rampTimer); rampTimer = null; }
+        showSyncing(false);
         video.pause();
-        seekTo(currentTimeMs);
+        const target = followTarget(currentTimeMs, 0);
+        if (Math.abs(video.currentTime * 1000 - target) > 500) seekTo(target);
       } else if (state === 'playing') {
-        seekTo(currentTimeMs);
-        video.play().catch(() => {});
+        evaluatePlayback();
       }
       btnPause.textContent = state === 'playing' ? 'Pause' : 'Play';
+    }
+
+    // Decide whether to play now or keep holding through the cold-start ramp.
+    // Until the room has LIVE_DELAY_MS of history there is nothing to sit behind,
+    // so hold on the first frame and let the transcoder build the cushion, then
+    // resume from the trailing position once enough has played. Joining a party
+    // already past LIVE_DELAY_MS skips the hold. Re-armed by a timer (the room
+    // clock advances even while we're paused) and by each 'sync' heartbeat.
+    function evaluatePlayback() {
+      if (!syncTarget || syncTarget.state !== 'playing') return;
+      const live = syncTarget.currentTimeMs + (Date.now() - syncTarget.setAt);
+      if (live < LIVE_DELAY_MS) {
+        showSyncing(true);
+        video.pause();
+        if (video.currentTime > 0.1) seekTo(0);
+        if (rampTimer) clearTimeout(rampTimer);
+        rampTimer = setTimeout(evaluatePlayback, LIVE_DELAY_MS - live + 100);
+        return;
+      }
+      if (rampTimer) { clearTimeout(rampTimer); rampTimer = null; }
+      showSyncing(false);
+      const target = followTarget(syncTarget.currentTimeMs, Date.now() - syncTarget.setAt);
+      if (Math.abs(video.currentTime * 1000 - target) > SOFT_DRIFT_MS) seekTo(target);
+      video.play().catch(() => {});
+    }
+
+    // Cold-start buffering indicator, shown in the status pill.
+    function showSyncing(on) {
+      if (on) {
+        statusEl.textContent = 'Syncing…';
+        statusEl.style.color = '#e0a030';
+      } else if (ws && ws.readyState === WebSocket.OPEN) {
+        statusEl.textContent = '●  Live';
+        statusEl.style.color = '#4caf50';
+      }
     }
 
     function seekTo(ms) {
@@ -616,7 +677,11 @@
     // Shared control actions (bound to both the page bar and the fullscreen bar).
     function togglePlayPause() { send({ type: video.paused ? 'play' : 'pause' }); }
     function back10() {
-      const target = Math.max(0, video.currentTime * 1000 - 10000);
+      // video.currentTime runs LIVE_DELAY_MS behind the room clock; convert back to
+      // the room's frame before sending so the seek lands exactly 10s earlier for
+      // everyone (the receive path subtracts LIVE_DELAY_MS again).
+      const serverNow = video.currentTime * 1000 + LIVE_DELAY_MS;
+      const target = Math.max(0, serverNow - 10000);
       send({ type: 'seek', currentTimeMs: target, label: 'skipped back 10s' });
     }
     function toggleFullscreen() {
@@ -684,7 +749,7 @@
     btnSync.addEventListener('click', () => {
       if (!syncTarget) return;
       const elapsed = syncTarget.state === 'playing' ? Date.now() - syncTarget.setAt : 0;
-      seekTo(syncTarget.currentTimeMs + elapsed);
+      seekTo(followTarget(syncTarget.currentTimeMs, elapsed));
     });
 
     // ── Time display + drift correction ───────────────────────────────────────
@@ -694,10 +759,13 @@
       timeEl.textContent = fmt(cur) + ' / ' + fmt(durationMs);
 
       if (syncTarget && syncTarget.state === 'playing' && !video.paused) {
-        const expected = syncTarget.currentTimeMs + (Date.now() - syncTarget.setAt);
-        // Only correct drift when the player has data to play; seeking while
-        // buffering flushes the buffer and makes things worse.
-        if (Math.abs(cur - expected) > 5000 && video.readyState >= 3) seekTo(expected);
+        const expected = followTarget(syncTarget.currentTimeMs, Date.now() - syncTarget.setAt);
+        const drift = Math.abs(cur - expected);
+        // Far out of sync (stuck replaying / stalled at the edge): jump back to the
+        // group even while buffering. Mild drift: nudge only when we have data,
+        // since seeking mid-buffer flushes the buffer and makes things worse.
+        if (drift > HARD_RESYNC_MS) seekTo(expected);
+        else if (drift > SOFT_DRIFT_MS && video.readyState >= 3) seekTo(expected);
       }
     });
 
