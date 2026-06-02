@@ -35,7 +35,7 @@ Sync flow: browser ↔ WebSocket (`/sync?token=…`) ↔ in-memory room state. T
 
 | File | Purpose |
 |---|---|
-| `nginx/default.conf` | Routing: `/manifest` → bot; `/dash/…` segments → Plex via auth_request. Single-file bind mount — see inode gotcha below. |
+| `nginx/default.conf` | Routing: `/manifest` → bot; `/dash/…` segments → Plex via auth_request. Baked into the published `discordwatchparty-nginx` image (`nginx/Dockerfile`) — no host-specific values, changing it requires a new image build/release. |
 | `public/watch.html` | Single-file watch page (Shaka Player + WebSocket sync UI). Served statically — requires container rebuild to update. |
 | `src/server/stream.ts` | `/:token/manifest` (DASH MPD / HLS) + `internalAuthHandler` that maps `/dash/…` segment requests back to the Plex upstream URL. |
 | `src/server/sync.ts` | WebSocket server keyed by **roomId**; broadcasts state; participants come from voice presence. |
@@ -46,17 +46,18 @@ Sync flow: browser ↔ WebSocket (`/sync?token=…`) ↔ in-memory room state. T
 | `src/providers/jellyfin.ts` | Jellyfin/Emby provider (HLS). Untested. |
 | `src/bot/commands/` | Slash command handlers. `_media.ts` holds the shared search/drill-down picker + enqueue. |
 | `src/store/guild-config.ts` | AES-256-GCM encrypted config (SQLite, `data/guild_configs.db`): provider, url, apiKey, playback token + user. |
-| `.github/workflows/docker.yml` | CI/CD: version tags → multi-arch Docker build → GHCR + GitHub release. |
+| `nginx/Dockerfile` | Builds the `discordwatchparty-nginx` image (`FROM nginx:alpine` + `COPY default.conf`). Published by CI alongside the bot image. |
+| `.github/workflows/docker.yml` | CI/CD: version tags → multi-arch Docker build of **both** images (bot + nginx) → GHCR + GitHub release. |
 
 ---
 
 ## Deployment notes
 
-**nginx config only** (no rebuild): copy `nginx/default.conf` to the server, then **restart the nginx container** (`docker restart <nginx>`). A bare `nginx -s reload` is *not* enough after replacing the file — see the inode gotcha.
+**Image-based hosts (the documented path):** `docker compose pull && docker compose up -d` from a directory holding just `docker-compose.yml` + `.env`. Both the bot and nginx run from published GHCR images — no source checkout, build, or bind-mounted nginx config. **nginx config changes ship in a new `discordwatchparty-nginx` image release**, not by editing a file on the host.
 
-**Code changes** (rebuild): `docker compose up --build -d`. The bot **registers slash commands automatically** on startup and on `GuildCreate` (per-guild, instant) — no separate deploy step. `npm run deploy-commands` / `node dist/bot/deploy.js` still exist for manual use (guild-scoped if `DISCORD_GUILD_ID` is set, else global).
+**Code/config changes (this repo, building from source):** `docker compose up --build -d`. The bot **registers slash commands automatically** on startup and on `GuildCreate` (per-guild, instant) — no separate deploy step. `npm run deploy-commands` / `node dist/bot/deploy.js` still exist for manual use (guild-scoped if `DISCORD_GUILD_ID` is set, else global).
 
-On a self-hosted deployment the app typically lives in a directory like `/docker/discordwatchparty/`. When building from source on the host, the compose `build:` context points at `./source`, so changed files must be copied under `source/` before rebuilding.
+When building from source on a host, the compose `build:` context points at `./source`, so changed files must be copied under `source/` before rebuilding.
 
 The bot needs the **Manage Channels** permission (create/delete party VCs) and the **Guild Voice States** intent (not privileged).
 
@@ -70,7 +71,7 @@ The bot needs the **Manage Channels** permission (create/delete party VCs) and t
 - **Playback identity uses the server-specific accessToken**, NOT the Plex Home switch `authToken` (which 401s on direct API). `fetchPlaybackToken` reads `https://plex.tv/api/servers/<machineId>/shared_servers`; managed users have a blank `username` there, so map display-name → userID via `/api/home/users` first, then match the share by userID. Validate with an auth-required endpoint (`/library/sections`), not `/identity` (unauthenticated).
 - **HEVC passthrough:** the Plex transcode is `videoDecision=copy` (remux) + audio transcode — ~5% CPU, parity with Plex Web. Requires HEVC-capable browsers. High CPU at session start is the buffer-fill burst, which then throttles.
 - **Plex session id format:** 24-char lowercase alphanumeric (`plexSessionId()`), not a UUID.
-- **nginx single-file bind-mount inode trap:** replacing `default.conf` over SMB swaps the inode; the container still sees the old file until restarted. Always `docker restart` nginx after replacing it (not just reload).
+- **nginx config ships in the image.** `default.conf` is baked into `discordwatchparty-nginx` (no bind-mount). Editing it means rebuilding/releasing that image and `docker compose pull` on hosts — there's no host-side file to swap or reload.
 - **nginx `proxy_ssl_server_name on`** on segment/direct locations (Cloudflare requires SNI); **`proxy_http_version 1.1` + `Connection ""`** for connection reuse; **`resolver 127.0.0.11 valid=30s ipv6=off`** for Docker DNS.
 - **Sessions/rooms are in-memory.** Restarting the bot clears all parties and watch links; on startup the bot deletes leftover empty party VCs in the "Watch Parties" category.
 - **Party cleanup** = idle (no voice members AND no connected web viewers) for ~2 min, or `/stop`. The reaper checks both signals.

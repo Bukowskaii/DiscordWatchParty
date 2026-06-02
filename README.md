@@ -53,9 +53,8 @@ These steps are for the person running the bot. You only do this once.
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- A [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (or any other way to expose a local port publicly over HTTPS)
+- A way to expose nginx (the `NGINX_PORT` below) publicly over **HTTPS** — a reverse proxy, tunnel, or whatever you already use. Setting that up is out of scope here; you just need the resulting `https://` URL for `PUBLIC_URL`.
 - A browser that can decode **HEVC** (Chrome 107+, Edge, or Safari) — same requirement as the Plex web app, since video is direct-streamed as HEVC
-- Node.js 20+ (only for the one-time `generate-key` step)
 
 ### 1. Create a Discord application
 
@@ -64,58 +63,48 @@ These steps are for the person running the bot. You only do this once.
 3. Under **General Information**, copy the **Application ID** — this is your `DISCORD_CLIENT_ID`.
 4. No privileged intents are required. (The bot uses the *Guild Voice States* intent, which is **not** privileged — no portal toggle needed.)
 
-### 2. Clone and configure
+### 2. Download and configure
+
+Create a directory for the bot and pull down the two files the stack needs — the compose file and the example env file. (Both images, including the nginx config, are published; nothing is built locally.)
 
 ```bash
-git clone https://github.com/Bukowskaii/DiscordWatchParty.git
-cd DiscordWatchParty
-npm install
+mkdir discordwatchparty && cd discordwatchparty
+curl -O https://raw.githubusercontent.com/Bukowskaii/DiscordWatchParty/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/Bukowskaii/DiscordWatchParty/main/.env.example
 ```
 
-Generate an encryption key (used to encrypt stored credentials at rest):
+Generate an encryption key (used to encrypt stored credentials at rest) and paste it into `.env`:
 
 ```bash
-npm run generate-key
-# prints: ENCRYPTION_KEY=<64 hex chars>
+openssl rand -hex 32
+# prints 64 hex chars — set this as ENCRYPTION_KEY in .env
 ```
 
-Copy the example env file and fill it in:
-
-```bash
-cp .env.example .env
-```
+Then open `.env` and fill in the rest:
 
 ```env
 DISCORD_BOT_TOKEN=        # from step 1
 DISCORD_CLIENT_ID=        # from step 1
-ENCRYPTION_KEY=           # from generate-key above
-PUBLIC_URL=               # your Cloudflare Tunnel URL, e.g. https://watchparty.example.com
-NGINX_PORT=8780           # port nginx listens on; your tunnel should point here
+ENCRYPTION_KEY=           # the `openssl rand -hex 32` output above
+PUBLIC_URL=               # the public https:// URL that reaches nginx, e.g. https://watchparty.example.com
+NGINX_PORT=8780           # host port nginx listens on; point your public proxy here
 # Optional:
-# DISCORD_GUILD_ID=       # if set, the manual deploy script registers to this guild only (instant)
 # SESSION_TTL_MINUTES=360 # watch-link lifetime (default 6 hours)
 ```
 
 ### 3. Start the bot
 
 ```bash
-docker compose up --build -d
+docker compose up -d
 ```
 
-This starts two containers: **nginx** (public-facing, port 8780) and the **bot** (internal, not exposed).
+This pulls and starts two containers, both from published images: **nginx** (public-facing, port 8780, `ghcr.io/bukowskaii/discordwatchparty-nginx`) and the **bot** (internal, not exposed, `ghcr.io/bukowskaii/discordwatchparty`).
 
-> **Slash commands register automatically.** On startup and whenever it joins a new server, the bot registers its `/` commands per-guild (instant, no propagation delay). You do **not** need to run a separate command-deploy step. A manual `npm run deploy-commands` still exists for edge cases (registers to `DISCORD_GUILD_ID` if set, otherwise globally).
+> **Slash commands register automatically.** On startup and whenever it joins a new server, the bot registers its `/` commands per-guild (instant, no propagation delay). You do **not** need to run a separate command-deploy step. (A manual `npm run deploy-commands` script also exists, but only from a source checkout — it isn't needed for the image-based setup above.)
 
-### 4. Configure Cloudflare Tunnel
+### 4. Expose nginx over HTTPS
 
-In the Cloudflare Zero Trust dashboard, add a public hostname for your tunnel:
-
-| Field | Value |
-|---|---|
-| Subdomain / domain | e.g. `watchparty.example.com` |
-| Service | `http://localhost:8780` (or your `NGINX_PORT`) |
-
-Set `PUBLIC_URL` in your `.env` to that full `https://` URL and restart:
+Point your reverse proxy / tunnel at `http://<host>:8780` (or your `NGINX_PORT`) so it's reachable at the `https://` URL you set as `PUBLIC_URL`. Setting that up is your call — anything that terminates TLS and forwards to nginx works. If you change `PUBLIC_URL` after starting, apply it with:
 
 ```bash
 docker compose restart
@@ -201,11 +190,15 @@ Use `playback-user:none` to revert to your own account. `/setup status` shows wh
 
 ## Updating
 
+Pull the latest published images and recreate the containers:
+
 ```bash
-git pull
-docker compose up --build -d
+docker compose pull
+docker compose up -d
 # Slash commands re-register automatically on startup.
 ```
+
+If a release changes `docker-compose.yml` itself (e.g. new services or env vars), re-fetch it first with the same `curl` command as in [Host setup](#2-download-and-configure), then `docker compose up -d`.
 
 ---
 
