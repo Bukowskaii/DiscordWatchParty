@@ -126,9 +126,13 @@
       border-radius: 8px;
       backdrop-filter: blur(3px);
       pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.3s ease;
     }
     #player-wrap:fullscreen #fs-overlay,
     #player-wrap:-webkit-full-screen #fs-overlay { display: block; }
+    /* When controls auto-hide, dim the participant list rather than removing it. */
+    #player-wrap.controls-idle #fs-overlay { opacity: 0.2; }
     .fs-label {
       font-size: 0.6rem;
       font-weight: 600;
@@ -159,10 +163,32 @@
       background: rgba(0, 0, 0, 0.4);
       border-radius: 10px;
       backdrop-filter: blur(3px);
+      align-items: center;
+      opacity: 1;
+      transition: opacity 0.3s ease;
     }
     #player-wrap:fullscreen #fs-controls,
     #player-wrap:-webkit-full-screen #fs-controls { display: flex; }
     #fs-controls button { font-size: 1.05rem; padding: 6px 14px; }
+    #fs-vol { width: 90px; }
+    /* Auto-hide the control bar and cursor after the mouse goes idle in fullscreen. */
+    #player-wrap.controls-idle #fs-controls { opacity: 0; pointer-events: none; }
+    #player-wrap.controls-idle { cursor: none; }
+
+    /* Fullscreen toast layer: lives inside #player-wrap so it renders in the
+       fullscreen top layer (the page-level #notifications does not). */
+    #fs-notifications {
+      display: none;
+      position: absolute;
+      bottom: 18px;
+      left: 18px;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #player-wrap:fullscreen #fs-notifications,
+    #player-wrap:-webkit-full-screen #fs-notifications { display: flex; }
 
     video {
       width: 100%;
@@ -362,8 +388,10 @@
         <div id="fs-controls">
           <button id="fs-back10" title="Back 10s">⏪</button>
           <button id="fs-play" title="Play / Pause">⏯</button>
+          <input id="fs-vol" type="range" min="0" max="1" step="0.05" value="1" title="Volume" />
           <button id="fs-exit" title="Exit fullscreen">⛶</button>
         </div>
+        <div id="fs-notifications"></div>
       </div>
       <div id="sidebar">
         <span class="sidebar-label">Watching</span>
@@ -426,11 +454,17 @@
     // ── Toast notifications ───────────────────────────────────────────────────
     const notifContainer = document.getElementById('notifications');
 
+    const fsNotifContainer = document.getElementById('fs-notifications');
+
     function showToast(text) {
+      // A public action just happened — treat it like a mouse move so the
+      // fullscreen controls and participant list come back into view, and route
+      // the toast into the fullscreen layer (the page-level one isn't visible there).
+      wakeControls();
       const el = document.createElement('div');
       el.className = 'toast';
       el.textContent = text;
-      notifContainer.appendChild(el);
+      (isFullscreen() ? fsNotifContainer : notifContainer).appendChild(el);
       setTimeout(() => {
         el.style.opacity = '0';
         setTimeout(() => el.remove(), 400);
@@ -601,8 +635,51 @@
     document.getElementById('fs-back10').addEventListener('click', back10);
     document.getElementById('fs-exit').addEventListener('click', toggleFullscreen);
 
-    // Volume is local-only (no sync / attribution).
-    volSlider.addEventListener('input', () => { video.volume = parseFloat(volSlider.value); });
+    // Volume is local-only (no sync / attribution). The page bar and the
+    // fullscreen bar each have a slider; keep them and the video in lockstep.
+    const fsVolSlider = document.getElementById('fs-vol');
+    function setVolume(v) {
+      video.volume = v;
+      volSlider.value = v;
+      fsVolSlider.value = v;
+    }
+    volSlider.addEventListener('input', () => setVolume(parseFloat(volSlider.value)));
+    fsVolSlider.addEventListener('input', () => setVolume(parseFloat(fsVolSlider.value)));
+
+    // ── Fullscreen idle auto-hide ─────────────────────────────────────────────
+    // After the mouse sits still in fullscreen, fade out the control bar (and dim
+    // the participant overlay); any movement brings them back and restarts the timer.
+    const isFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement;
+    let idleTimer = null;
+    function clearIdle() {
+      playerWrap.classList.remove('controls-idle');
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    function scheduleIdle() {
+      if (!isFullscreen()) return;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => playerWrap.classList.add('controls-idle'), 2500);
+    }
+    // Bring the controls/participant list back and restart the idle countdown.
+    // Triggered by real input and by public actions (see showToast).
+    function wakeControls() {
+      playerWrap.classList.remove('controls-idle');
+      scheduleIdle();
+    }
+    function onActivity() {
+      if (!isFullscreen()) return;
+      wakeControls();
+    }
+    playerWrap.addEventListener('mousemove', onActivity);
+    playerWrap.addEventListener('mousedown', onActivity);
+    playerWrap.addEventListener('touchstart', onActivity);
+    function onFullscreenChange() {
+      if (isFullscreen()) scheduleIdle();
+      else clearIdle();
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     btnSync.addEventListener('click', () => {
       if (!syncTarget) return;
