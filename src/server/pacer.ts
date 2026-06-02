@@ -24,6 +24,14 @@ const START_NUMBER = 0;
 // or it could cache an incomplete segment. The real viewers' cached margin comes
 // from the client-side LIVE_DELAY, not from this lead.
 const LEAD_SEGMENTS = 3;
+// How far BELOW the live room position the pacer keeps the cache warm. Real
+// viewers play LIVE_DELAY (~20s, watch.html) behind the live edge, so the
+// segment a client actually requests sits this many segments below playN.
+// Default 30s (= 6 segments at 5s) covers the 20s live-delay plus a 10s
+// back-hop. Override via PACER_BEHIND_MS.
+const BEHIND_SEGMENTS = Math.ceil(
+  (Number(process.env.PACER_BEHIND_MS ?? '30000') || 30000) / 1000 / SEGMENT_SECONDS,
+);
 const FETCH_TIMEOUT_MS = 25_000;
 
 interface Pacer { sessionId: string; cancelled: boolean; }
@@ -85,14 +93,21 @@ async function launch(roomId: string, sessionId: string): Promise<void> {
       if (!room || room.state === 'stopped' || room.transcodeSession?.id !== sessionId) break;
 
       const playN = START_NUMBER + Math.floor(getLiveTimeMs(room) / 1000 / SEGMENT_SECONDS);
-      // Backward seek (clients can only hop back in 10s steps — no forward seek):
-      // playback jumped behind us. Re-pace from the rewind point so the pacer
-      // re-warms any evicted segments itself instead of leaving a real client to
-      // take the MISS. playN is monotonic during normal play and frozen while
-      // paused, so a decrease only ever means a rewind.
-      if (playN < lastPlayN) nextN = playN;
+      // Real viewers read LIVE_DELAY behind the live room position, so the segment
+      // a client actually requests sits BEHIND_SEGMENTS *below* playN. Keep the
+      // pacer's floor there (not at playN) so the pacer — not a real viewer —
+      // takes any MISS across the whole trailing read window.
+      const floorN = Math.max(START_NUMBER, playN - BEHIND_SEGMENTS);
+      // Backward seek (clients can only hop back in 10s steps — no forward seek)
+      // or a fresh launch mid-party: drop the pacer back to the trailing window so
+      // it re-warms the rewound/old segments itself. A 10s hop moves the room ~10s,
+      // but the client's read target sits a further LIVE_DELAY back — which is why
+      // re-pacing from playN alone left a real viewer to take the MISS. playN is
+      // monotonic during play and frozen while paused, so a decrease means a
+      // rewind. Re-fetching still-cached segments is a cheap nginx HIT, so
+      // over-covering the window is harmless.
+      if (playN < lastPlayN || nextN < floorN) nextN = floorN;
       lastPlayN = playN;
-      if (nextN < playN) nextN = playN;              // pacer behind playback (just launched mid-party) — jump up
       const leadN = Math.min(endN, playN + LEAD_SEGMENTS);
 
       if (nextN > leadN) { await sleep(500); continue; } // caught up — idle
