@@ -85,6 +85,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         id: notes
         run: |
+          # actions/checkout leaves the pushed tag as a lightweight ref, so
+          # re-fetch it to recover the annotated tag object (the message lives there).
+          git fetch --tags --force
           echo "subject=$(git tag -l --format='%(contents:subject)' "${GITHUB_REF_NAME}")" >> "$GITHUB_OUTPUT"
           {
             echo 'body<<RELEASE_NOTES_EOF'
