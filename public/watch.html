@@ -685,12 +685,17 @@
       send({ type: 'seek', currentTimeMs: target, label: 'skipped back 10s' });
     }
     function toggleFullscreen() {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        const req = playerWrap.requestFullscreen || playerWrap.webkitRequestFullscreen;
-        if (req) req.call(playerWrap);
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        return;
       }
+      const req = playerWrap.requestFullscreen || playerWrap.webkitRequestFullscreen;
+      if (req) { req.call(playerWrap); return; }
+      // iOS Safari has no element-level Fullscreen API (requestFullscreen is
+      // undefined on a div); it only supports native fullscreen on the <video>
+      // itself. Custom controls/overlay can't be shown over iOS fullscreen video,
+      // but sync keeps working underneath and the native "Done" button exits.
+      if (typeof video.webkitEnterFullscreen === 'function') video.webkitEnterFullscreen();
     }
 
     btnPause.addEventListener('click', togglePlayPause);
