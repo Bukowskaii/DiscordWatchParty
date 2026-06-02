@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a problem with DiscordWatchParty
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! **Do not report security vulnerabilities here** —
+        see [SECURITY.md](../security/policy) and use private vulnerability reporting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I run /play …, the watch page shows … but I expected …
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run /play with …
+        2. Open the watch link
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Media provider
+      description: Plex is the only validated provider; Jellyfin/Emby paths are untested.
+      options:
+        - Plex
+        - Jellyfin / Emby (untested)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: deployment
+    attributes:
+      label: Deployment method
+      placeholder: Published GHCR images / built from source / other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Bot and/or nginx logs. **Redact any tokens, URLs, and secrets first.**
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - Host OS / arch:
+        - Docker version:
+        - Plex Media Server version:
+        - Browser (for the watch page):
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues for a duplicate.
+          required: true
+        - label: I have removed all tokens/secrets from logs and screenshots.
+          required: true
